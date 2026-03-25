@@ -1,0 +1,9 @@
+# Requires Python 3.11+ for google-meridian
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+numpy
+pandas
+scipy
+google-meridian
