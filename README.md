@@ -23,13 +23,13 @@ cd backend
 /opt/homebrew/bin/python3.13 -m venv venv313
 source venv313/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 8001
 ```
 
-Backend runs at **http://localhost:8000** · Swagger UI at **http://localhost:8000/docs**
+Backend runs at **http://localhost:8001** · Swagger UI at **http://localhost:8000/docs**
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8001/health
 # → {"status":"ok","service":"MMM Demo API"}
 ```
 
