@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 15, 23, 42;
+  --background-start-rgb: 248, 249, 251;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-start-rgb));
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl border border-surface-200 shadow-sm;
+  }
+  .card-header {
+    @apply px-6 py-4 border-b border-surface-100;
+  }
+  .card-body {
+    @apply px-4 py-4 sm:px-6 sm:py-5;
+  }
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-surface-100 hover:bg-surface-200 text-slate-700 text-sm font-medium rounded-lg transition-colors border border-surface-200;
+  }
+  .insight-badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+  .tab-active {
+    @apply bg-white text-brand-600 shadow-sm font-semibold;
+  }
+  .tab-inactive {
+    @apply text-slate-500 hover:text-slate-700;
+  }
+}
