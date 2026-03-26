@@ -48,6 +48,9 @@ Thumbs.db
 
 # IDE
 .vscode/
+
+# Assets
+assets/
 .idea/
 *.swp
 *.swo
