@@ -20,10 +20,6 @@ Built as a learning tool and reference demo, it showcases practical approaches t
 <img src="https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3R6N25rMzJhcmdjYnhyOW9yZXVvaHhzZ2IwZzV4MzdudGx2ZmxqZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/X0aJMLC1yNcs35c3Vc/giphy.gif" width="100%" />
 
 </td>
-<table>
-<tr>
-
-<td width="50%">
 
 ## What You Can Do
 
@@ -36,10 +32,6 @@ Built as a learning tool and reference demo, it showcases practical approaches t
 | **Compare channels** | See which channels contributed most to your total revenue |
 | **Check model quality** | See diagnostic charts that tell you if the results are trustworthy |
 | **Try without setup** | 5 ready-to-go sample datasets included — no data prep needed to explore |
-
-</td>
-</tr>
-</table>
 
 
 ## Get Started (15 minutes)
@@ -147,7 +139,7 @@ Already built in, no downloading needed:
 | **With Organic** | All of the above plus organic search | When organic is important |
 | **Indonesia** | Tiktok, Shopee, Instagram, YouTube, Google Ads, Meta in Indonesian Rupiah | E-commerce example |
 
-Don't have data? Just pick one of these and click "Run Model" to see how it works.
+Pick one of these and click "Run Model" to see how it works.
 
 ---
 
@@ -183,7 +175,7 @@ Just make sure your CSV has:
 
 ## Next Steps
 
-Want to understand the technical details? Read **[TECHNICAL_README.md](TECHNICAL_README.md)** for how the model works.
+Read **[TECHNICAL_README.md](TECHNICAL_README.md)** for how the model works.
 
 ---
 

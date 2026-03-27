@@ -54,6 +54,8 @@ assets/
 
 # AI Assistant
 claude/
+.claude/
+settiings.local.json
 
 # IDE
 .idea/
