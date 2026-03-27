@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: "MMM Studio: Marketing Mix Modeling Platform"
+message: "If you use this project, please cite it as below."
+type: software
+authors:
+  - family-names: "Utomo"
+    given-names: "Sandi"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+    affiliation: "Independent Developer"
+repository-code: "https://github.com/sandiutomo/mmm-studio"
+repository: "https://github.com/sandiutomo/mmm-studio"
+url: "https://github.com/sandiutomo/mmm-studio"
+abstract: "A full-stack Bayesian marketing mix modeling platform powered by Google Meridian with real MCMC inference, 90% credible intervals, and budget optimization. Built to work end-to-end with real data, featuring a smart correlation-based fallback for when Meridian is unavailable. Includes 5 built-in datasets and comprehensive model diagnostics."
+keywords:
+  - marketing-mix-modeling
+  - mmm
+  - bayesian
+  - mcmc
+  - meridian
+  - google-meridian
+  - attribution
+  - budget-optimization
+  - nextjs
+  - fastapi
+  - python
+  - tensorflow-probability
+  - arviz
+  - credible-intervals
+version: 1.0.0
+date-released: 2025-01-15
+license: MIT
