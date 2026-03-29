@@ -1,3 +1,25 @@
+# =============================================================================
+# services/model_runner.py — The coordinator: deciding how to fit the model
+#
+# This service sits between the router and the actual Meridian sampling code.
+# Its job is to orchestrate the run and handle the two-tier fallback strategy:
+#
+#   Tier 1 — Real Meridian MCMC (requires Python 3.11+ with google-meridian):
+#             Calls MeridianRunner.fit() which runs full Bayesian inference.
+#             Results include true posterior ROI distributions, R-hat convergence
+#             checks, Effective Sample Size (ESS), and predictive accuracy metrics.
+#
+#   Tier 2 — Correlation-based approximation (works everywhere):
+#             If Meridian isn't installed, the run "succeeds" with a fallback flag
+#             set to True. ResultsGeneratorService then uses Pearson correlation
+#             to estimate channel attribution instead. Useful for demos where you
+#             just want to see the UI working without waiting for full MCMC.
+#
+# The service also stores configuration at the class level so a separate
+# POST /model/configure call can set options before POST /model/run triggers
+# the actual sampling.
+# =============================================================================
+
 import logging
 import time
 from typing import Optional
@@ -14,12 +36,16 @@ class ModelRunnerService:
     allowing the correlation-based approximation in results_generator to serve results.
     """
 
+    # Class-level state so configure() and run() can be called in separate
+    # HTTP requests without losing the settings between them.
     _config: Optional[dict] = None
     _is_fit: bool = False
     _status: str = 'idle'
     _last_error: Optional[str] = None
 
     def configure(self, config: dict) -> dict:
+        # Store the user's model settings. Nothing runs yet — this just saves
+        # the parameters so the subsequent run() call knows what to do.
         logger.info("[ModelRunner] configure(): channels=%s  geos=%s  time_range=%s→%s  "
                     "n_chains=%d  n_adapt=%d  n_burnin=%d  n_keep=%d  max_lag=%d  "
                     "adstock=%s  media_prior=%s  holdout_pct=%.2f",
@@ -51,6 +77,7 @@ class ModelRunnerService:
         }
 
     def run(self) -> dict:
+        # Convenience wrapper for synchronous (blocking) sampling.
         return self.run_with_progress(None)
 
     def run_with_progress(self, progress_callback) -> dict:
@@ -65,7 +92,7 @@ class ModelRunnerService:
 
         config = self.__class__._config or {}
 
-        # Try real Meridian integration first
+        # ── Tier 1: Try real Meridian MCMC ────────────────────────────────
         try:
             from services.data_loader import DataLoaderService
             data = DataLoaderService._loaded_data
@@ -82,6 +109,9 @@ class ModelRunnerService:
             self.__class__._status = 'complete'
             elapsed = time.time() - t0
 
+            # Log the key quality metrics so we know if the model is trustworthy.
+            # R-hat values above 1.1 suggest the sampling chains didn't converge —
+            # results should be treated with caution in that case.
             rhat = results.get('rhat', {})
             ess  = results.get('ess', {})
             logger.info("[ModelRunner] MCMC complete in %.1fs — rhat_max=%.4f  rhat_mean=%.4f  "
@@ -103,7 +133,9 @@ class ModelRunnerService:
             }
 
         except MeridianNotAvailable as e:
-            # Expected in Python 3.9 environments — not an error
+            # This is the expected path when running under Python 3.9 where
+            # google-meridian isn't installed. Not an error — just a capability
+            # downgrade. The results endpoints will use correlation-based estimates.
             logger.warning("[ModelRunner] Meridian not available (%s) — using correlation fallback", e)
             self.__class__._last_error = str(e)
             self.__class__._is_fit = True
@@ -119,6 +151,9 @@ class ModelRunnerService:
             }
 
         except Exception as e:
+            # Something unexpected went wrong. We still mark the model as "fit"
+            # so the frontend can continue and show approximate results rather
+            # than being stuck in a broken state.
             logger.error("[ModelRunner] run() failed after %.1fs: %s", time.time() - t0, e, exc_info=True)
             self.__class__._last_error = str(e)
             self.__class__._is_fit = True
@@ -140,6 +175,8 @@ class ModelRunnerService:
         }
 
     def save(self, name: str) -> str:
+        # Serialise the fitted Meridian model object to disk with pickle so it
+        # can be reloaded in a future session without re-running sampling.
         import os, pickle
         os.makedirs('models', exist_ok=True)
         path = f'models/{name}.pkl'

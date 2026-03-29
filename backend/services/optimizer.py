@@ -1,3 +1,31 @@
+# =============================================================================
+# services/optimizer.py — The strategist: finding the best budget allocation
+#
+# This service answers the core "so what?" question of the whole platform:
+#   "We've measured ROI for each channel — now how should we spend the budget?"
+#
+# The optimizer takes a total budget and works out a per-channel allocation that
+# maximises projected revenue. It does this in two ways depending on what's
+# available:
+#
+#   Tier 1 — Meridian's BudgetOptimizer (Python 3.11+ with google-meridian):
+#             Uses the fitted posterior model directly. The optimizer knows the
+#             full shape of each channel's diminishing-returns curve (not just
+#             a point estimate of ROI), so it can find the spend level where
+#             marginal return equals marginal cost — the economically optimal point.
+#
+#   Tier 2 — Proportional ROI rebalance (works everywhere):
+#             A simpler approach: give channels with higher ROI a larger share
+#             of the budget, scaled by the square root of ROI (to avoid putting
+#             everything into one channel). Budget limits prevent any channel
+#             from taking more than 50% or less than 5% of the total.
+#
+# The square-root weighting in the fallback is intentional: it's a heuristic
+# that approximates the diminishing-returns effect without needing the full
+# Hill curve. A channel with 4x the ROI gets √4 = 2x the weight, not 4x —
+# reflecting that you can't infinitely scale a high-ROI channel.
+# =============================================================================
+
 import logging
 from typing import Dict, Optional
 
@@ -13,8 +41,9 @@ class OptimizerService:
 
     def _get_channel_data(self) -> Optional[dict]:
         """
-        Load real channel spend and ROI from the most recently loaded dataset.
-        Prefers Meridian posterior ROIs when available.
+        Assemble per-channel spend and ROI from the most recently loaded dataset.
+        Prefers real Meridian posterior ROIs when sampling has already run,
+        otherwise uses the correlation-based estimates from results_generator.
         """
         logger.debug("[Optimizer] _get_channel_data() loading channel data from DataLoaderService")
         try:
@@ -72,7 +101,15 @@ class OptimizerService:
     def _try_meridian_optimizer(self, channel_data: dict, total_budget: float) -> Optional[dict]:
         """
         Attempt to use Meridian's BudgetOptimizer.
-        Requires Python 3.11+ with google-meridian installed and a fitted model.
+
+        This uses the full fitted model — not just point-estimate ROIs but the
+        actual posterior distribution over the response curves. Meridian's
+        optimizer finds the spend allocation that maximises expected revenue
+        subject to a minimum floor (5% of budget per channel) and a maximum cap
+        (50% of budget per channel) to ensure diversification.
+
+        Requires Python 3.11+ with google-meridian installed and a model that
+        has already been fitted via sample_posterior().
         """
         logger.info("[Optimizer] Attempting Meridian BudgetOptimizer: total_budget=%.2f", total_budget)
         try:
@@ -139,8 +176,14 @@ class OptimizerService:
     def optimize(self, total_budget: float, scenario: Optional[Dict] = None) -> Dict:
         """
         Optimize budget allocation across channels.
-        Uses real data from loaded Meridian CSVs. Falls back to static demo data
-        only when no dataset has been loaded yet.
+
+        The public entry point. Tries Meridian's optimizer first, then the
+        proportional fallback. If neither can run (no data loaded at all),
+        falls back to a hard-coded Indonesia demo dataset so the UI always
+        has something to display.
+
+        Returns per-channel current vs. optimal spend and the projected
+        revenue improvement from making the switch.
         """
         logger.info("[Optimizer] optimize() called: total_budget=%.2f  scenario=%s",
                     total_budget, scenario)
@@ -163,23 +206,26 @@ class OptimizerService:
             return meridian_result
 
         logger.info("[Optimizer] Using proportional ROI rebalance (fallback)")
-        # Proportional rebalance — channels with higher ROI get a larger share of budget
         channels = channel_data['channels']
         channel_labels = channel_data['channel_labels']
         spend = channel_data['spend']
         roi = channel_data['roi']
         n = len(channels)
 
+        # Square-root weighting approximates diminishing returns without a full
+        # Hill curve. A channel with 4x the ROI gets 2x the budget share, not 4x.
         roi_weights = [r ** 0.5 for r in roi]
         total_weight = sum(roi_weights)
 
+        # Hard budget guardrails: no channel below 5% (floor) or above 50% (cap).
         min_spend = total_budget * 0.05
         max_spend = total_budget * 0.50
 
         raw_alloc = [(w / total_weight) * total_budget for w in roi_weights]
         clamped = [max(min_spend, min(max_spend, a)) for a in raw_alloc]
 
-        # Re-normalize to hit total budget exactly
+        # After clamping, the allocations no longer sum to the total budget.
+        # Re-normalise to preserve the total while respecting the floor/cap constraints.
         total_clamped = sum(clamped)
         allocation_values = [round(v * total_budget / total_clamped) for v in clamped]
 

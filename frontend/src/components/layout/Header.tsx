@@ -19,7 +19,7 @@ export default function Header({ currentStep, backendOnline }: HeaderProps) {
         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
           <div className="flex items-center gap-2 text-brand-600 min-w-0">
             <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-            <span className="text-base sm:text-lg font-bold text-slate-900 truncate">MMM · Meridian</span>
+            <span className="text-base sm:text-lg font-bold text-slate-900 truncate">Marketing Mix Model Studio</span>
           </div>
           <span className="hidden sm:inline text-slate-300">|</span>
           <span className="text-xs sm:text-sm text-slate-500 truncate">Google Meridian</span>

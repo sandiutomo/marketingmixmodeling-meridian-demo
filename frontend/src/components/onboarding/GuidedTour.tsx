@@ -7,7 +7,7 @@ const STEPS = [
     icon: BarChart3,
     subtitle: 'Welcome',
     title: 'See how your marketing actually works',
-    body: 'This demo shows you Marketing Mix Modeling (MMM) using Google Meridian — an open-source platform built for modern marketing teams. Unlike last-click attribution, MMM measures the real contribution of every channel, including TV and radio, backed by statistical evidence.',
+    body: 'Marketing Mix Model Studio uses Google Meridian to show you how your marketing actually works. Unlike last-click attribution, MMM measures the real contribution of every channel, including TV and radio, backed by statistical evidence.',
     tip: null,
   },
   {

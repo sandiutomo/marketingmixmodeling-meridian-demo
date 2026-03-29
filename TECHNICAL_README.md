@@ -1,6 +1,12 @@
-# MMM Studio — Marketing Mix Modeling
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.x-3776AB?style=flat-square&logo=python&logoColor=white)
+![Dashboard](https://img.shields.io/badge/Type-Interactive%20Dashboard-4285F4?style=flat-square)
+![Prototype](https://img.shields.io/badge/Status-Prototype-FF9500?style=flat-square)
+![Free](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-A full-stack Marketing Mix Modeling platform powered by **Google Meridian** — real Bayesian MCMC inference, not a simulation. Built as a credible demo that works end-to-end with real data even when Meridian is not installed, via a correlation-based fallback.
+# Marketing Mix Model Studio | Understand Which Channels Drive Your Revenue
+
+A full-stack Marketing Mix Modeling platform powered by **Google Meridian**; real Bayesian MCMC inference, not a simulation. Built as a credible demo that works end-to-end with real data even when Meridian is not installed, via a correlation-based fallback.
 
 ---
 
@@ -396,3 +402,13 @@ curl http://localhost:8000/model/run/status/$JOB
 # When complete
 # → {"status":"complete","progress":100,"diagnostics":{...}}
 ```
+
+---
+
+### License
+Free to use for personal learning, testing, and demo purposes. Attribution appreciated. See LICENSE file for details.
+
+---
+
+[![Made by Sandi Utomo](https://img.shields.io/badge/Made%20by-Sandi%20Utomo%20😎-5A6AE8?style=flat-square&logo=github&logoColor=white)](https://github.com/sandiutomo)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Sandi%20Utomo-0A66C2?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/sandiutomo/)

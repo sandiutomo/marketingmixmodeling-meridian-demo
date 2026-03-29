@@ -1,8 +1,38 @@
+# =============================================================================
+# services/results_generator.py — The translator: turning model output into
+#                                  business insights the frontend can display
+#
+# After the model runs, the raw output is a collection of posterior distributions
+# (probability curves over parameter values). This service's job is to extract
+# the specific numbers the UI needs — ROI per channel, revenue contribution,
+# model diagnostics, Hill curve parameters, adstock decay rates, and geo breakdowns
+# — and package them into clean JSON-ready dicts.
+#
+# Like the rest of the backend, this service operates in two modes:
+#
+#   Real Meridian posterior (preferred):
+#     When MeridianRunner.fit() has run, _last_results holds the full set of
+#     posterior summaries. This service reads from that and returns true Bayesian
+#     credible intervals and ROI estimates.
+#
+#   Correlation-based fallback:
+#     When Meridian hasn't run (or isn't installed), _compute_from_data() runs
+#     a quick correlation analysis directly on the spend and revenue arrays.
+#     The results are less precise (no uncertainty quantification, assumes linear
+#     relationships) but load instantly and always produce *something* to display.
+#
+# At the bottom of the file, CHANNEL_DISPLAY, CHANNEL_COLORS, FALLBACK_ROI, and
+# CHANNEL_DECAY_RATE are lookup tables that map internal channel key names to
+# UI-friendly labels, chart colours, and reasonable placeholder values.
+# =============================================================================
+
 import logging
 import numpy as np
 from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# ── UI lookup tables ──────────────────────────────────────────────────────────
 
 CHANNEL_DISPLAY = {
     'tv': 'TV', 'paid_search': 'Paid Search', 'social': 'Social',
@@ -31,7 +61,10 @@ FALLBACK_ROI = {
     'search': 4.50, 'ecommerce': 4.20, 'programmatic': 2.60, 'influencer': 3.10,
 }
 
-# Heuristic adstock decay rates per channel type (used when Meridian hasn't run)
+# Heuristic adstock decay rates per channel type — used when Meridian hasn't run.
+# These reflect typical real-world carryover patterns: broadcast channels (TV,
+# radio, OOH) linger longer in memory; performance channels (paid search, display)
+# have very short carryover because they only work when the user is actively browsing.
 CHANNEL_DECAY_RATE = {
     'tv': 0.65, 'radio': 0.55, 'ooh': 0.58, 'youtube': 0.35,
     'social': 0.35, 'display': 0.25, 'paid_search': 0.20,
@@ -41,6 +74,11 @@ CHANNEL_DECAY_RATE = {
 
 
 def _pearson_r(x: np.ndarray, y: np.ndarray) -> float:
+    # Pearson correlation measures how closely two variables move together
+    # on a scale from -1 (perfectly opposite) to +1 (perfectly together).
+    # We use it as a proxy for "how strongly does spending on this channel
+    # correlate with higher revenue?" — not causation, but a useful signal
+    # when we don't have a full Bayesian posterior to pull from.
     mx, my = x.mean(), y.mean()
     cov = ((x - mx) * (y - my)).mean()
     sx = np.std(x)
@@ -49,7 +87,24 @@ def _pearson_r(x: np.ndarray, y: np.ndarray) -> float:
 
 
 def _compute_from_data(data: dict) -> Optional[dict]:
-    """Compute ROI and attribution from loaded Meridian CSV data (correlation-based fallback)."""
+    """
+    Compute ROI and attribution from loaded data using correlation (fallback path).
+
+    This runs when Meridian hasn't been fitted. It's a purely statistical
+    approximation — not causal inference. The key steps:
+
+      1. Compute the Pearson correlation between each channel's spend and revenue.
+      2. Weight each channel's contribution by both its correlation and its
+         total spend (channels that correlate *and* spend a lot get more credit).
+      3. Attribute 85% of total revenue to media channels combined
+         (15% is assumed to be "base" — what the brand would have earned anyway).
+      4. Estimate ROI = attributed revenue / spend for each channel.
+      5. Build confidence intervals using the coefficient of variation (CV) of
+         spend — channels with very inconsistent spend have wider, less reliable
+         intervals (CV = standard deviation / mean).
+      6. Estimate R² (model fit) by comparing the model's predictions to actual
+         revenue. This is a rough estimate, not the same R² Meridian computes.
+    """
     logger.debug("[ResultsGenerator] _compute_from_data() — correlation-based attribution")
     try:
         spend = data['spend_data']
@@ -133,9 +188,16 @@ def _safe_get(d: dict, *keys) -> Optional[float]:
 
 
 class ResultsGeneratorService:
-    """Computes results from real Meridian CSV data via DataLoaderService.
+    """
+    Computes results from real Meridian CSV data via DataLoaderService.
     When MeridianRunner has real posterior results, uses those preferentially.
     Otherwise falls back to correlation-based computation.
+
+    Each public method follows the same pattern:
+      1. Check if MeridianRunner has real posterior results → use those.
+      2. Fall back to _compute_from_data() (correlation-based).
+      3. If even that fails (no data loaded), return static placeholder data
+         so the frontend never shows a blank screen.
     """
 
     @staticmethod

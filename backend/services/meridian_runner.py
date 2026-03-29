@@ -1,45 +1,84 @@
-"""
-Real Meridian integration layer — verified against google-meridian 1.5.3 / Python 3.13.
-
-Correct API (discovered by inspection of installed package):
-
-  InputData construction:
-    builder = NDArrayInputDataBuilder(kpi_type='revenue')
-    builder.time_coords = [list of date strings]   # must be set first
-    builder.geos = [list of geo strings]            # omit for national (auto-set)
-    builder.with_population(np.ones(n_geos))        # required
-    builder.with_kpi(kpi_nd)                        # (n_geos, n_times)
-    builder.with_media(m_nd, ms_nd, media_channels) # m_nd: (n_geos, n_times, n_ch)
-    builder.with_reach(r_nd, f_nd, rfs_nd, rf_chs)  # reach/freq/rf_spend
-    builder.with_controls(ctrl_nd, ctrl_names)
-    input_data = builder.build()
-
-  Model:
-    model = Meridian(input_data=..., model_spec=...)          # NOT data=, spec=
-    model.sample_posterior(n_chains, n_adapt, n_burnin, n_keep, seed)  # NOT .fit()
-
-  Analyzer (meridian.analysis.analyzer.Analyzer, NOT meridian.analysis.Analyzer):
-    summary_ds = analyzer.summary_metrics(confidence_level=0.9)
-      → xr.Dataset with coords: channel, metric (mean/median/ci_low/ci_high), distribution
-      → variables: roi, mroi, incremental_outcome, spend, pct_of_contribution, ...
-    rhat_df = analyzer.rhat_summary()
-      → DataFrame cols: n_params, avg_rhat, max_rhat, percent_bad_rhat
-    acc_ds = analyzer.predictive_accuracy()
-      → xr.Dataset with vars: R_Squared, MAPE, wMAPE; coords: metric, geo_granularity, evaluation_set
-    hill_df = analyzer.hill_curves(confidence_level=0.9)
-      → DataFrame cols: channel, media_units, distribution, ci_hi, ci_lo, mean, channel_type
-      → Returns curve VALUES at 25 bins, not ec/slope params — we fit those ourselves
-    adstock_df = analyzer.adstock_decay(confidence_level=0.9)
-      → DataFrame cols: channel, time_units, distribution, ci_hi, ci_lo, mean
-      → mean at time_units=1 is the geometric decay rate
-    (No get_ess() method in Meridian 1.5.3)
-
-  BudgetOptimizer:
-    from meridian.analysis.optimizer import BudgetOptimizer
-    opt = BudgetOptimizer(meridian=model)        # NOT model=
-    result = opt.optimize(budget=..., fixed_budget=True,
-                          spend_constraint_lower=..., spend_constraint_upper=...)
-"""
+# =============================================================================
+# services/meridian_runner.py — The engine room: running the actual statistics
+#
+# This file is the heart of the platform. Everything before this point was
+# about getting data into the right shape; everything after is about reading
+# the results back out. This is where the actual maths happens.
+#
+# The technique is Bayesian inference via MCMC (Markov Chain Monte Carlo).
+# The short version:
+#   We have a marketing dataset: weekly spend per channel and weekly revenue.
+#   We want to know: "How much of that revenue did each channel cause?"
+#   Simple correlation can hint at an answer, but it can't separate causes from
+#   coincidences. Bayesian inference builds a full *probability distribution*
+#   over the answer — so we get not just "TV ROI is 2.8" but "TV ROI is most
+#   likely between 2.1 and 3.6."
+#
+# The specific model used is Google's Meridian (version 1.5.3). It models two
+# important real-world effects:
+#
+#   Adstock (carryover): Ad effects linger after the ad runs. A TV campaign
+#   seen this week can still influence a purchase three weeks from now. Meridian
+#   models this as a geometric decay — each week retains a fraction of the
+#   previous week's effect.
+#
+#   Hill saturation (diminishing returns): Doubling ad spend does not double
+#   revenue. The Hill function captures this — response rises steeply at first,
+#   then levels off. The ec parameter marks the spend level where you hit 50%
+#   of the maximum possible response.
+#
+# The MCMC sampler (specifically NUTS — No-U-Turn Sampler, a modern variant)
+# explores the space of possible parameter values. It runs multiple independent
+# chains in parallel (nChains) and we check that they agree (R-hat statistic)
+# as a sign the results are trustworthy.
+#
+# After sampling, the Analyzer class computes everything we need:
+#   - ROI per channel (with credible intervals)
+#   - Incremental revenue attribution per channel
+#   - R-hat convergence diagnostics
+#   - Predictive accuracy (R², MAPE)
+#   - Hill saturation curve parameters
+#   - Adstock decay rates
+#
+# ── API reference (google-meridian 1.5.3, verified by inspection) ──────────
+#
+#   InputData construction:
+#     builder = NDArrayInputDataBuilder(kpi_type='revenue')
+#     builder.time_coords = [list of date strings]   # must be set first
+#     builder.geos = [list of geo strings]            # omit for national (auto-set)
+#     builder.with_population(np.ones(n_geos))        # required
+#     builder.with_kpi(kpi_nd)                        # (n_geos, n_times)
+#     builder.with_media(m_nd, ms_nd, media_channels) # m_nd: (n_geos, n_times, n_ch)
+#     builder.with_reach(r_nd, f_nd, rfs_nd, rf_chs)  # reach/freq/rf_spend
+#     builder.with_controls(ctrl_nd, ctrl_names)
+#     input_data = builder.build()
+#
+#   Model:
+#     model = Meridian(input_data=..., model_spec=...)          # NOT data=, spec=
+#     model.sample_posterior(n_chains, n_adapt, n_burnin, n_keep, seed)  # NOT .fit()
+#
+#   Analyzer (meridian.analysis.analyzer.Analyzer, NOT meridian.analysis.Analyzer):
+#     summary_ds = analyzer.summary_metrics(confidence_level=0.9)
+#       → xr.Dataset with coords: channel, metric (mean/median/ci_low/ci_high), distribution
+#       → variables: roi, mroi, incremental_outcome, spend, pct_of_contribution, ...
+#     rhat_df = analyzer.rhat_summary()
+#       → DataFrame cols: n_params, avg_rhat, max_rhat, percent_bad_rhat
+#     acc_ds = analyzer.predictive_accuracy()
+#       → xr.Dataset with vars: R_Squared, MAPE, wMAPE; coords: metric, geo_granularity, evaluation_set
+#     hill_df = analyzer.hill_curves(confidence_level=0.9)
+#       → DataFrame cols: channel, media_units, distribution, ci_hi, ci_lo, mean, channel_type
+#       → Returns curve VALUES at 25 bins, not ec/slope params — we fit those ourselves
+#     adstock_df = analyzer.adstock_decay(confidence_level=0.9)
+#       → DataFrame cols: channel, time_units, distribution, ci_hi, ci_lo, mean
+#       → mean at time_units=1 is the geometric decay rate
+#     (No get_ess() method in Meridian 1.5.3)
+#
+#   BudgetOptimizer:
+#     from meridian.analysis.optimizer import BudgetOptimizer
+#     opt = BudgetOptimizer(meridian=model)        # NOT model=
+#     result = opt.optimize(budget=..., fixed_budget=True,
+#                           spend_constraint_lower=..., spend_constraint_upper=...)
+# =============================================================================
 
 import logging
 import time
@@ -56,7 +95,20 @@ def _resolve_prior_mu_sigma(
     labels: dict,
     priors: dict,
 ) -> tuple[float, float]:
-    """Match UI prior keys to data channel keys (slug or human label)."""
+    """
+    Match UI prior keys to data channel keys (slug or human label).
+
+    When a user types "TV" as their prior channel name in the UI, the underlying
+    data might call it "tv", "TV", or "channel_0". This function tries all
+    reasonable variants so the prior gets applied correctly no matter which
+    naming convention was used.
+
+    The returned values are (mu, sigma) — parameters of a LogNormal prior on
+    the ROI (return on investment) for this channel. A LogNormal prior is
+    appropriate because ROI must be positive and tends to have a right-skewed
+    distribution (most channels deliver modest returns, a few deliver very high
+    ones). mu ≈ 0.2 and sigma ≈ 0.9 are weak defaults that let the data speak.
+    """
     default_mu, default_sigma = 0.2, 0.9
     if not priors:
         return default_mu, default_sigma
@@ -108,6 +160,13 @@ class MeridianRunner:
     Wraps Meridian's NDArrayInputDataBuilder → Meridian.sample_posterior() →
     Analyzer, and extracts all posterior summaries needed by the results layer.
     Results are stored as class-level state so results_generator can retrieve them.
+
+    The full sampling pipeline (in order):
+      1. Build InputData — package the numpy arrays into the format Meridian expects
+      2. Build ModelSpec — configure the statistical model (adstock, priors, holdout)
+      3. sample_prior    — draw from the prior distribution (needed for summary_metrics)
+      4. sample_posterior — run the MCMC chains (the slow, main step)
+      5. Analyze          — extract ROI, contribution, R-hat, Hill, adstock, geo ROI
     """
 
     _last_results: Optional[dict] = None
@@ -568,7 +627,22 @@ class MeridianRunner:
 # ── Helper functions ──────────────────────────────────────────────────────────
 
 def _hill_func(x, ec, slope):
-    """Normalized Hill function (range 0–1): x^slope / (x^slope + ec^slope)."""
+    """
+    Normalized Hill function — models diminishing returns on advertising spend.
+
+    The formula is: f(x) = x^slope / (x^slope + ec^slope)
+
+    This is a curve that:
+      - Starts near 0 when spend is very low
+      - Reaches exactly 0.5 when spend equals ec (the "half-saturation point")
+      - Approaches 1.0 asymptotically as spend grows very large
+
+    ec    = the spend level where you've used up half the channel's potential
+    slope = how sharply the curve bends (higher slope → more S-curve shape)
+
+    The output is in the range [0, 1] — we multiply it by maxResponse elsewhere
+    to get actual revenue numbers.
+    """
     x = np.maximum(x, 1e-10)
     return x ** slope / (x ** slope + ec ** slope)
 
@@ -576,10 +650,15 @@ def _hill_func(x, ec, slope):
 def _extract_hill_params(hill_df, summary_ds, ch_coords) -> list:
     """
     Fit Hill ec and slope from the hill_curves() posterior output.
-    hill_curves() returns curve VALUES at 25 spend bins, not ec/slope directly.
-    We fit a Hill function to those values to recover ec and slope.
-    maxResponse is derived from summary_metrics incremental_outcome × 2.5
-    (consistent with the correlation-based fallback formula).
+
+    Meridian's hill_curves() doesn't return ec and slope directly — instead
+    it returns a table of (spend, response) pairs at 25 evenly-spaced spend
+    levels. We then fit the Hill function to those pairs using scipy's
+    curve_fit to recover the underlying ec and slope parameters.
+
+    maxResponse (the revenue ceiling a channel could theoretically reach at
+    infinite spend) is estimated from the posterior incremental_outcome mean
+    multiplied by 2.5 — a consistent scaling that matches the fallback formula.
     """
     params   = []
     post_df  = hill_df[hill_df['distribution'] == 'posterior']
@@ -635,7 +714,15 @@ def _extract_hill_params(hill_df, summary_ds, ch_coords) -> list:
 def _extract_adstock_params(adstock_df, max_lag: int) -> list:
     """
     Extract per-channel decay rate from adstock_decay() DataFrame.
-    mean at time_units=1 is the geometric decay rate (fraction remaining after 1 period).
+
+    The adstock_decay() output is a table showing how much of an ad's effect
+    remains at each lag (0, 1, 2, … max_lag weeks after the ad ran). The value
+    at time_units=1 is the geometric decay rate: what fraction of this week's
+    ad effect carries over into next week.
+
+    Example: a decay rate of 0.65 for TV means that if TV drove $1000 of
+    revenue this week, it will drive an extra $650 next week, $423 the week
+    after, and so on — just from the memory of having seen the ad.
     """
     params   = []
     post_df  = adstock_df[adstock_df['distribution'] == 'posterior']

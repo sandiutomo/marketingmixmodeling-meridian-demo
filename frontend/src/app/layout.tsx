@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Marketing Mix Modeling | Meridian Demo',
+  title: 'Marketing Mix Model Studio',
   description: 'Understand where your marketing budget creates the most impact',
 }
 
