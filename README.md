@@ -85,6 +85,8 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
 ```
 
+> **Note:** `google-meridian` is not on PyPI and is installed directly from GitHub. This requires `git` to be installed and may take a few minutes on first run.
+
 **You should see:**
 ```
 INFO:     Uvicorn running on http://127.0.0.1:8001

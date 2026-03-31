@@ -6,4 +6,4 @@ python-multipart
 numpy
 scipy
 arviz
-google-meridian
+google-meridian @ git+https://github.com/google/meridian.git
