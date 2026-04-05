@@ -1,66 +1,90 @@
 'use client'
-import { BarChart3, Wifi } from 'lucide-react'
+import { Activity, Wifi, WifiOff } from 'lucide-react'
 
 interface HeaderProps {
   currentStep: number
   backendOnline: boolean | null
 }
 
-const steps = [
-  { num: 1, label: 'Data' },
-  { num: 2, label: 'Model' },
-  { num: 3, label: 'Insights' },
+const STEPS = [
+  { num: 1, label: 'Load Data',    hint: 'Choose your dataset' },
+  { num: 2, label: 'Configure',    hint: 'Set model parameters' },
+  { num: 3, label: 'Results',      hint: 'Explore insights' },
 ]
 
 export default function Header({ currentStep, backendOnline }: HeaderProps) {
   return (
-    <header className="bg-white border-b border-surface-200 px-3 sm:px-6 py-3 sm:py-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between max-w-screen-xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
-          <div className="flex items-center gap-2 text-brand-600 min-w-0">
-            <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-            <span className="text-base sm:text-lg font-bold text-slate-900 truncate">Marketing Mix Model Studio</span>
+    <header className="bg-ink-900 text-white border-b border-ink-800 px-3 sm:px-6 py-0">
+      <div className="max-w-screen-xl mx-auto flex items-stretch gap-4 md:gap-8 min-h-[52px]">
+
+        {/* Brand */}
+        <div className="flex items-center gap-3 py-3 shrink-0 pr-4 border-r border-ink-700">
+          <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center shrink-0">
+            <Activity className="w-4 h-4 text-white" strokeWidth={2.5} />
           </div>
-          <span className="hidden sm:inline text-slate-300">|</span>
-          <span className="text-xs sm:text-sm text-slate-500 truncate">Google Meridian</span>
+          <div className="hidden sm:block leading-tight">
+            <p className="text-sm font-bold text-white tracking-tight">MMM Studio</p>
+            <p className="text-2xs text-ink-400 font-medium">Google Meridian · Marketing Mix Modeling</p>
+          </div>
+          <p className="sm:hidden text-sm font-bold text-white">MMM Studio</p>
         </div>
 
-        <nav className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 -mx-1 px-1 scrollbar-thin">
-          {steps.map((step) => (
-            <div key={step.num} className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-              <div
-                className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-colors ${
-                  currentStep === step.num
-                    ? 'bg-brand-500 text-white'
-                    : currentStep > step.num
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-surface-100 text-slate-400'
-                }`}
-              >
-                <span
-                  className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-                    currentStep > step.num ? 'bg-green-500 text-white' : 'bg-white/30'
+        {/* Step indicator */}
+        <nav className="flex items-center gap-0.5 py-2 flex-1 overflow-x-auto scrollbar-none">
+          {STEPS.map((step, idx) => {
+            const done    = currentStep > step.num
+            const active  = currentStep === step.num
+            const pending = currentStep < step.num
+            return (
+              <div key={step.num} className="flex items-center gap-0.5 shrink-0">
+                {idx > 0 && (
+                  <div className={`h-px w-4 sm:w-6 mx-0.5 ${done || active ? 'bg-brand-500' : 'bg-ink-700'}`} />
+                )}
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    active  ? 'bg-brand-500 text-white'
+                    : done  ? 'bg-ink-700/60 text-ink-300'
+                    : 'text-ink-500'
                   }`}
                 >
-                  {currentStep > step.num ? '✓' : step.num}
-                </span>
-                <span className="hidden xs:inline">{step.label}</span>
+                  <span
+                    className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      done   ? 'bg-green-500 text-white'
+                      : active ? 'bg-white/20 text-white'
+                      : 'bg-ink-700 text-ink-500'
+                    }`}
+                  >
+                    {done ? '✓' : step.num}
+                  </span>
+                  <span className="hidden xs:inline">{step.label}</span>
+                  {active && <span className="hidden md:inline text-brand-200 font-normal">— {step.hint}</span>}
+                </div>
               </div>
-              {step.num < 3 && <div className="w-2 sm:w-4 h-px bg-surface-200 hidden sm:block" />}
-            </div>
-          ))}
+            )
+          })}
         </nav>
 
-        <div className="flex items-center gap-2 text-[11px] sm:text-xs shrink-0">
-          {backendOnline === null && <span className="text-slate-400">Checking…</span>}
+        {/* Backend status */}
+        <div className="flex items-center py-2 pl-4 border-l border-ink-700 shrink-0">
+          {backendOnline === null && (
+            <span className="text-xs text-ink-500 animate-pulse">checking…</span>
+          )}
           {backendOnline === true && (
-            <span className="flex items-center gap-1 text-green-600 font-medium">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-green-400">
               <Wifi className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Backend</span> online
+              <span className="hidden sm:inline">Live backend</span>
+              <span className="sm:hidden">Live</span>
             </span>
           )}
-          {backendOnline === false && <span className="text-amber-600 font-medium">Demo mode</span>}
+          {backendOnline === false && (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-amber-400">
+              <WifiOff className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Demo mode</span>
+              <span className="sm:hidden">Demo</span>
+            </span>
+          )}
         </div>
+
       </div>
     </header>
   )
