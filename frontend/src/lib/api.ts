@@ -1,4 +1,4 @@
-import type { ModelResults, ChannelResult } from './types'
+import type { ModelResults, ChannelResult, ChannelConstraint, TimePeriod, TimeseriesResult, SynergyResult, SaturationResult, WaterfallResult, HoldoutDesignResult, ModelFitResult, MROIChannel } from './types'
 
 const BASE_URL = '/api/backend';
 
@@ -110,6 +110,124 @@ export async function runOptimization(budget: number, scenario?: object) {
   const data = await res.json();
   console.log('[API] Optimization results:', data)
   return data;
+}
+
+/**
+ * Run budget optimization with optional per-channel constraints and RF frequency settings.
+ * Mirrors the Meridian Scenario Planner notebook's ChannelConstraintRel + use_optimal_frequency.
+ *
+ * channel_constraints: per-channel min/max spend fraction (keyed by display name, e.g. 'TV').
+ * use_optimal_frequency: enable frequency-aware optimization for RF channels.
+ * max_frequency: upper limit for frequency (recommended ≤ 10 when source data > 30 rows).
+ */
+export async function runOptimizationWithConstraints(
+  budget: number,
+  channelConstraints?: Record<string, ChannelConstraint>,
+  useOptimalFrequency?: boolean,
+  maxFrequency?: number,
+  scenario?: object,
+) {
+  console.log(
+    `[API] Optimization with constraints — budget: ${budget.toLocaleString()}`,
+    { channelConstraints, useOptimalFrequency, maxFrequency },
+  )
+  const body: Record<string, unknown> = { budget }
+  if (scenario) body.scenario = scenario
+  if (channelConstraints && Object.keys(channelConstraints).length > 0)
+    body.channel_constraints = channelConstraints
+  if (useOptimalFrequency !== undefined) body.use_optimal_frequency = useOptimalFrequency
+  if (maxFrequency !== undefined) body.max_frequency = maxFrequency
+
+  const res = await fetch(`${BASE_URL}/optimization/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error((err as { detail?: string }).detail ?? `Optimization failed (${res.status})`)
+  }
+  const data = await res.json()
+  console.log('[API] Optimization with constraints results:', data)
+  return data
+}
+
+/**
+ * Fetch channel revenue attribution broken down by time period.
+ * Mirrors the Meridian Scenario Planner notebook's time_breakdown_generators.
+ *
+ * period: 'weekly' | 'monthly' | 'quarterly' | 'yearly' (default: 'quarterly')
+ */
+export async function fetchTimeseries(period: TimePeriod = 'quarterly'): Promise<TimeseriesResult> {
+  console.log(`[API] Fetching timeseries breakdown — period: ${period}`)
+  const res = await fetch(`${BASE_URL}/results/timeseries?period=${period}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error((err as { detail?: string }).detail ?? `Timeseries failed (${res.status})`)
+  }
+  const data = await res.json()
+  console.log(`[API] Timeseries (${period}):`, data)
+  return data as TimeseriesResult
+}
+
+export async function fetchSynergy(): Promise<SynergyResult> {
+  console.log('[API] Fetching cross-channel synergy matrix')
+  const res = await fetch(`${BASE_URL}/results/synergy`)
+  if (!res.ok) throw new Error(`Synergy failed (${res.status})`)
+  return res.json() as Promise<SynergyResult>
+}
+
+export async function fetchSaturation(): Promise<SaturationResult> {
+  console.log('[API] Fetching saturation frontier')
+  const res = await fetch(`${BASE_URL}/results/saturation`)
+  if (!res.ok) throw new Error(`Saturation failed (${res.status})`)
+  return res.json() as Promise<SaturationResult>
+}
+
+export async function fetchWaterfall(period: TimePeriod = 'quarterly'): Promise<WaterfallResult> {
+  console.log(`[API] Fetching waterfall — period: ${period}`)
+  const res = await fetch(`${BASE_URL}/results/waterfall?period=${period}`)
+  if (!res.ok) throw new Error(`Waterfall failed (${res.status})`)
+  return res.json() as Promise<WaterfallResult>
+}
+
+export async function fetchModelFit(): Promise<ModelFitResult> {
+  console.log('[API] Fetching model fit timeseries')
+  const res = await fetch(`${BASE_URL}/results/model_fit`)
+  if (!res.ok) throw new Error(`Model fit failed (${res.status})`)
+  return res.json() as Promise<ModelFitResult>
+}
+
+export async function fetchMROI(): Promise<MROIChannel[]> {
+  console.log('[API] Fetching marginal ROI per channel')
+  const res = await fetch(`${BASE_URL}/results/mroi`)
+  if (!res.ok) throw new Error(`mROI failed (${res.status})`)
+  return res.json() as Promise<MROIChannel[]>
+}
+
+export async function fetchCpik(): Promise<Array<{
+  channel: string; channel_key: string; cpik: number | null;
+  roi: number; spend: number; revenue: number;
+  spend_pct: number; contribution_pct: number; color: string; is_real_meridian: boolean;
+}>> {
+  const res = await fetch(`${BASE_URL}/results/cpik`)
+  if (!res.ok) throw new Error(`CPIK failed (${res.status})`)
+  return res.json()
+}
+
+export function getExportCsvUrl(): string {
+  return `${BASE_URL}/results/export/csv`
+}
+
+export function getExportHtmlUrl(): string {
+  return `${BASE_URL}/results/export/html`
+}
+
+export async function fetchHoldoutDesign(): Promise<HoldoutDesignResult> {
+  console.log('[API] Fetching holdout design')
+  const res = await fetch(`${BASE_URL}/results/holdout-design`)
+  if (!res.ok) throw new Error(`Holdout design failed (${res.status})`)
+  return res.json() as Promise<HoldoutDesignResult>
 }
 
 export async function saveModel(name: string) {

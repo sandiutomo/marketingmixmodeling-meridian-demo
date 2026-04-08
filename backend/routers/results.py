@@ -24,7 +24,7 @@
 # =============================================================================
 
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from services.results_generator import ResultsGeneratorService
 
 logger = logging.getLogger(__name__)
@@ -98,3 +98,151 @@ def get_geo_breakdown():
     # markets are most efficient and whether spend should be rebalanced.
     logger.debug("[Router/results] GET /results/geo")
     return generator.get_geo_breakdown()
+
+
+@router.get("/timeseries")
+def get_timeseries(
+    period: str = Query(
+        "quarterly",
+        pattern="^(weekly|monthly|quarterly|yearly)$",
+        description=(
+            "Time granularity for the breakdown. "
+            "One of: weekly | monthly | quarterly | yearly. "
+            "Mirrors the Meridian Scenario Planner notebook's time_breakdown_generators."
+        ),
+    )
+):
+    """
+    Return channel revenue attribution broken down by time period.
+
+    Mirrors the Meridian Scenario Planner notebook's time_breakdown_generators
+    parameter. Produces a stacked bar/area chart data structure with one row per
+    period bucket and one column per marketing channel plus a Base (non-media) column.
+
+    Valid period values:
+      - weekly    : one data point per week
+      - monthly   : aggregated to calendar month
+      - quarterly : aggregated to calendar quarter (Q1–Q4)
+      - yearly    : aggregated to calendar year
+    """
+    logger.info("[Router/results] GET /results/timeseries  period=%s", period)
+    return generator.get_timeseries(period)
+
+
+@router.get("/synergy")
+def get_synergy():
+    """
+    Pairwise Pearson correlation of weekly channel spend series.
+    Returns an n×n correlation matrix and a filtered pairs list sorted by
+    absolute correlation descending.
+
+    When a real Meridian posterior is available, method='meridian'.
+    Otherwise method='pearson' (correlation on historical spend data).
+    """
+    logger.info("[Router/results] GET /results/synergy")
+    return generator.get_synergy()
+
+
+@router.get("/saturation")
+def get_saturation():
+    """
+    Per-channel saturation frontier: current spend vs. Hill-curve ec (half-saturation
+    point), marginal ROI at current spend, and a status label
+    ('saturated' | 'efficient' | 'room_to_grow').
+    """
+    logger.info("[Router/results] GET /results/saturation")
+    return generator.get_saturation()
+
+
+@router.get("/waterfall")
+def get_waterfall(
+    period: str = Query(
+        "quarterly",
+        pattern="^(weekly|monthly|quarterly|yearly)$",
+        description="Time granularity for the waterfall breakdown. Same values as /timeseries.",
+    )
+):
+    """
+    Period-over-period revenue change per channel.
+    First period = baseline (absolute values). Subsequent periods = delta vs previous.
+    Designed for a waterfall / stacked bar chart showing what drove revenue changes.
+    """
+    logger.info("[Router/results] GET /results/waterfall  period=%s", period)
+    return generator.get_waterfall(period)
+
+
+@router.get("/model_fit")
+def get_model_fit():
+    """
+    Weekly actual vs model-predicted revenue.
+    Equivalent to Meridian's visualizer.ModelFit.plot_model_fit().
+    Used by the frontend ModelFitChart to show how well the model tracks reality.
+    """
+    logger.info("[Router/results] GET /results/model_fit")
+    return generator.get_model_fit()
+
+
+@router.get("/mroi")
+def get_mroi():
+    """
+    Marginal ROI per channel: revenue from the last dollar spent.
+    Computed as the Hill curve derivative at current spend levels.
+    Equivalent to Meridian's visualizer.MediaSummary.plot_roi_vs_mroi() data.
+    """
+    logger.info("[Router/results] GET /results/mroi")
+    return generator.get_mroi()
+
+
+@router.get("/cpik")
+def get_cpik():
+    """
+    Cost Per Incremental KPI per channel.
+    CPIK = spend ÷ incremental_revenue — lower is better.
+    Equivalent to Meridian's visualizer.MediaSummary.plot_cpik().
+    """
+    logger.info("[Router/results] GET /results/cpik")
+    return generator.get_cpik()
+
+
+@router.get("/export/csv")
+def export_csv():
+    """
+    Looker Studio–ready flat CSV of all channel metrics.
+    Upload to Google Sheets → connect a Looker Studio report pre-built
+    with the channel metrics schema.
+    """
+    from fastapi.responses import Response
+    logger.info("[Router/results] GET /results/export/csv")
+    csv_content = generator.get_export_csv()
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="meridian_channel_metrics.csv"'},
+    )
+
+
+@router.get("/export/html")
+def export_html():
+    """
+    Self-contained HTML report — mirrors Meridian's Summarizer.output_model_results_summary().
+    All styles are inlined; renders in any browser without external dependencies.
+    """
+    from fastapi.responses import Response
+    logger.info("[Router/results] GET /results/export/html")
+    html_content = generator.get_export_html()
+    return Response(
+        content=html_content,
+        media_type="text/html",
+        headers={"Content-Disposition": 'attachment; filename="meridian_model_report.html"'},
+    )
+
+
+@router.get("/holdout-design")
+def get_holdout_design():
+    """
+    Suggest treatment/control geo assignments for a media lift test.
+    Geos are sorted by portfolio ROI and alternately assigned to each group.
+    Returns applicable=False for single-geo (national) datasets.
+    """
+    logger.info("[Router/results] GET /results/holdout-design")
+    return generator.get_holdout_design()

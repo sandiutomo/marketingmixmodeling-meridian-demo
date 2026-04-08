@@ -4,9 +4,9 @@ interface PlanningCycleSummaryProps {
 
 export default function PlanningCycleSummary({ items }: PlanningCycleSummaryProps) {
   return (
-    <details className="group rounded-xl bg-slate-900 overflow-hidden">
+    <details className="group rounded-xl bg-slate-900 overflow-hidden border-l-4 border-brand-500">
       <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none list-none">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">What this means for your next planning cycle</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">What to do next</p>
         <span className="text-slate-500 text-xs group-open:hidden">Show</span>
         <span className="text-slate-500 text-xs hidden group-open:inline">Hide</span>
       </summary>

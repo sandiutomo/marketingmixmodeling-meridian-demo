@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef } from 'react'
-import { MapPin, Radio, Leaf, Globe, ChevronRight, CheckCircle2, Table2, Upload, Loader2 } from 'lucide-react'
+import { MapPin, Radio, Leaf, Globe, ChevronRight, ChevronDown, CheckCircle2, Table2, Upload, Loader2, BarChart2, Sliders, TrendingUp } from 'lucide-react'
 import type { DataSourceType, DataSource, UploadedDataSummary } from '@/lib/types'
 import { uploadCsv } from '@/lib/api'
 import DataPreviewModal from './DataPreviewModal'
@@ -25,10 +25,10 @@ const DATA_SOURCES: DataSource[] = [
   {
     id: 'geo_organic',
     label: 'Geographic + Organic & Non-Media',
-    description: '20 regions, 5 paid channels, plus organic impressions, promotions, and competitor controls.',
+    description: '40 regions, 5 paid channels, plus organic impressions, promotions, and competitor controls.',
     useCase: 'Use this when you want to isolate what your paid media is actually doing versus natural growth, seasonality, or promotions.',
     channels: ['TV', 'Paid Search', 'Social', 'Display', 'OOH', 'Organic'],
-    geos: Array.from({ length: 20 }, (_, i) => `Geo${i}`),
+    geos: Array.from({ length: 40 }, (_, i) => `Geo${i}`),
   },
   {
     id: 'national',
@@ -40,8 +40,8 @@ const DATA_SOURCES: DataSource[] = [
   {
     id: 'indonesia',
     label: '🇮🇩 Indonesia Market',
-    description: 'National dataset for the Indonesian market — 313 weeks (Jan 2019–Dec 2024), IDR currency, with Ramadan/Lebaran, Harbolnas 11.11, year-end seasonality, and COVID-19 disruption.',
-    useCase: 'Use this to explore MMM with a realistic Indonesian channel mix across 6 years of data — including digital transformation, OOH collapse during COVID, and e-commerce growth.',
+    description: 'National dataset for the Indonesian market, 313 weeks (Jan 2019 to Dec 2024), IDR currency, with Ramadan/Lebaran, Harbolnas 11.11, year-end seasonality, and COVID-19 disruption.',
+    useCase: 'Use this to explore Marketing Mix Modeling (MMM) with a realistic Indonesian channel mix across 6 years of data, including digital transformation, OOH collapse during COVID, and e-commerce growth.',
     channels: ['TV', 'Social', 'Search', 'OOH', 'E-commerce', 'YouTube', 'Programmatic', 'Influencer'],
   },
 ]
@@ -64,6 +64,9 @@ const ROW_COUNTS: Record<DataSourceType, { rows: number; cols: number }> = {
   national:    { rows: 156,  cols: 17 },
 }
 
+// Recommended starter dataset
+const RECOMMENDED_ID: DataSourceType = 'geo_no_rf'
+
 interface SourceCardProps {
   source: DataSource
   selected: DataSourceType | null
@@ -78,7 +81,13 @@ function SourceCard({ source, selected, expanded, onSelect, setExpanded, setPrev
   const Icon = ICONS[source.id]
   const isSelected = selected === source.id
   const isExpanded = expanded === source.id
+  const isRecommended = source.id === RECOMMENDED_ID
   const { rows, cols } = ROW_COUNTS[source.id]
+
+  const toggleExpand = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setExpanded(isExpanded ? null : source.id)
+  }
 
   return (
     <div
@@ -88,23 +97,41 @@ function SourceCard({ source, selected, expanded, onSelect, setExpanded, setPrev
           : isCustom ? 'border-emerald-300 bg-gradient-to-br from-emerald-50 to-white hover:border-emerald-400 shadow-emerald-100 shadow-sm' : 'hover:border-brand-200'
       }`}
     >
-      <div className="px-5 py-4 cursor-pointer" onClick={() => { onSelect(source.id); setExpanded(source.id) }}>
+      <div
+        className="px-5 py-4 cursor-pointer"
+        onClick={() => { onSelect(source.id); setExpanded(isExpanded ? null : source.id) }}
+      >
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
             <div className={`p-2 rounded-lg shrink-0 ${isSelected ? (isCustom ? 'bg-emerald-50 text-emerald-600' : 'bg-brand-50 text-brand-600') : isCustom ? 'bg-emerald-50 text-emerald-500' : 'bg-surface-100 text-slate-500'}`}>
               <Icon className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-semibold text-slate-900 text-sm">{source.label}</h3>
-                {isSelected && <CheckCircle2 className={`w-4 h-4 ${isCustom ? 'text-emerald-500' : 'text-brand-500'}`} />}
+                {isRecommended && !isSelected && (
+                  <span className="text-xs font-medium px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full">Start here</span>
+                )}
+                {isSelected && <CheckCircle2 className={`w-4 h-4 shrink-0 ${isCustom ? 'text-emerald-500' : 'text-brand-500'}`} />}
                 {isCustom && <span className="text-xs font-medium px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">IDR</span>}
                 <span className="text-xs text-slate-400 font-mono">{rows.toLocaleString()} rows · {cols} cols</span>
               </div>
               <p className="text-sm text-slate-500 mt-0.5">{source.description}</p>
+              {isRecommended && (
+                <p className="text-xs text-green-600 mt-0.5">Start here if this is your first time running a model.</p>
+              )}
             </div>
           </div>
-          <ChevronRight className={`w-4 h-4 text-slate-400 shrink-0 mt-0.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+
+          {/* Expand affordance */}
+          <button
+            type="button"
+            onClick={toggleExpand}
+            className={`flex items-center gap-1 text-xs shrink-0 mt-0.5 transition-colors ${isExpanded ? (isCustom ? 'text-emerald-600' : 'text-brand-600') : 'text-slate-400 hover:text-brand-500'}`}
+          >
+            <span className="hidden sm:inline">{isExpanded ? 'Hide details' : 'Show details'}</span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          </button>
         </div>
 
         {isExpanded && (
@@ -129,7 +156,7 @@ function SourceCard({ source, selected, expanded, onSelect, setExpanded, setPrev
       </div>
 
       {isExpanded && (
-        <div className="px-5 pb-4">
+        <div className="px-5 pb-4 flex items-center gap-3">
           <button
             onClick={e => { e.stopPropagation(); setPreviewing(source.id) }}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors shadow-sm ${isCustom ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-brand-600 hover:bg-brand-700'}`}
@@ -137,6 +164,57 @@ function SourceCard({ source, selected, expanded, onSelect, setExpanded, setPrev
             <Table2 className="w-4 h-4" />
             Preview data
           </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Collapsible CSV format guide
+function CsvFormatGuide() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-xs text-slate-400 hover:text-brand-600 transition-colors"
+      >
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        CSV format guide
+      </button>
+      {open && (
+        <div className="mt-2 overflow-hidden rounded-lg border border-surface-200">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-surface-50 text-left">
+                <th className="px-3 py-2 font-semibold text-slate-500">Column name</th>
+                <th className="px-3 py-2 font-semibold text-slate-500">What it means</th>
+                <th className="px-3 py-2 font-semibold text-slate-500">Example</th>
+                <th className="px-3 py-2 font-semibold text-slate-500">Group</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-100">
+              {[
+                { col: 'date',             desc: 'Week start date (YYYY-MM-DD) — one row per week', ex: '2024-01-07',  group: 'Required' },
+                { col: 'revenue',          desc: 'Total revenue that week (KPI column)',              ex: '89500',       group: 'Required' },
+                { col: 'tv_spend',         desc: 'TV spend that week (repeat for each channel)',       ex: '12400',       group: 'Media spend' },
+                { col: 'paid_search_spend',desc: 'Paid Search spend that week',                       ex: '4800',        group: 'Media spend' },
+                { col: 'geo',              desc: 'Region identifier — omit for national-level data',  ex: 'northeast',   group: 'Optional' },
+                { col: 'promotion_flag',   desc: 'Binary column: 1 = promotional period, 0 = normal',ex: '1',           group: 'Controls (optional)' },
+                { col: 'competitor_spend', desc: 'Competitor advertising spend — helps the model isolate your causal effect', ex: '5200', group: 'Controls (optional)' },
+                { col: 'organic_impr',     desc: 'Organic impressions (social, search) — controls for earned media', ex: '42000', group: 'Controls (optional)' },
+              ].map(r => (
+                <tr key={r.col} className="bg-white">
+                  <td className="px-3 py-2 font-mono text-slate-700">{r.col}</td>
+                  <td className="px-3 py-2 text-slate-600">{r.desc}</td>
+                  <td className="px-3 py-2 font-mono text-slate-400">{r.ex}</td>
+                  <td className="px-3 py-2 text-slate-400 text-[10px]">{r.group}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -193,22 +271,34 @@ export default function DataSourcePanel({ selected, onSelect, onConfirm, isLoadi
 
   return (
     <div className="space-y-4">
-      <div className="p-4 bg-brand-50 border border-brand-100 rounded-xl space-y-2">
-        <p className="text-sm font-semibold text-brand-800">What is Marketing Mix Modeling?</p>
-        <p className="text-sm text-brand-700">Last-click and platform attribution only show part of the picture. They track clicks and conversions inside their own platforms (Facebook, TikTok, GA4, etc.), but they miss everything happening outside of that.</p>
-        <p className="text-sm text-brand-700 mt-2">MMM takes a broader view. It looks at your historical spend and revenue across all channels together, then estimates what each channel actually contributed versus what would have happened anyway. This includes channels like TV, radio, and out-of-home — not just digital.</p>
-        <p className="text-sm text-brand-700 mt-2">This demo uses <strong>Google Meridian</strong>, an open-source MMM framework. Instead of giving you a single ROI number, it shows a range for each channel, so you can see both the estimated impact and how confident the model is in that estimate.</p>
-      </div>
-
+      {/* Value-first headline + 3-icon benefit bar */}
       <div>
+        <details className="mb-3">
+          <summary className="inline cursor-pointer text-xs text-brand-600 hover:text-brand-800 underline underline-offset-2 list-none">
+            What is Marketing Mix Modeling?
+          </summary>
+          <span className="block mt-2 p-3 bg-brand-50 border border-brand-100 rounded-lg space-y-1.5 not-italic text-xs">
+            <span className="block text-slate-700">Last-click and platform attribution only show part of the picture — they miss channels like TV, radio, and out-of-home. Marketing Mix Modeling looks at your historical spend and revenue across all channels together, then estimates what each actually caused versus what would have happened anyway.</span>
+            <span className="block text-slate-700">This platform uses <strong>Google Meridian</strong> (Google's open-source Bayesian MMM framework built on JAX), which gives you a confidence range per channel, not just a single ROI number.</span>
+          </span>
+        </details>
         <h2 className="text-xl font-bold text-slate-900">Step 1: Choose your data</h2>
-        <p className="text-sm text-slate-500 mt-1">
-  MMM typically requires at least two years of weekly spend and revenue data across all channels. 
-  The datasets below simulate that setup.
-</p>
-<p className="text-sm text-slate-500">
-  Choose the one that best matches your business:
-</p>
+        <p className="text-sm text-slate-500 mt-1">Upload or choose a dataset to see how your marketing budget is actually driving revenue.</p>
+        <div className="flex flex-wrap gap-4 mt-3">
+          {[
+            { Icon: BarChart2, label: 'Measure channel ROI' },
+            { Icon: Sliders,   label: 'Optimize budget allocation' },
+            { Icon: TrendingUp, label: 'Run what-if scenarios' },
+          ].map(({ Icon, label }) => (
+            <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
+              <Icon className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+              {label}
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-slate-400 mt-3">
+          Marketing Mix Modeling (MMM) requires at least two years of weekly spend and revenue data. The datasets below simulate that setup. Choose the one that best matches your business.
+        </p>
       </div>
 
       <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
@@ -250,22 +340,19 @@ export default function DataSourcePanel({ selected, onSelect, onConfirm, isLoadi
               }`}
               onClick={handlePickCsv}
             >
-              <div className="px-4 py-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="px-4 py-4 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-start gap-3">
                 <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 shrink-0 self-start">
                   {uploadBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-slate-900 text-sm">Upload your own CSV</h3>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Requires a <code className="font-mono bg-slate-100 px-1 rounded">time</code> column, revenue (
-                    <code className="font-mono bg-slate-100 px-1">revenue</code> or{' '}
-                    <code className="font-mono bg-slate-100 px-1">conversions</code> ×{' '}
-                    <code className="font-mono bg-slate-100 px-1">revenue_per_conversion</code>), and spend columns (
-                    <code className="font-mono bg-slate-100 px-1">Channel0_spend</code> or{' '}
-                    <code className="font-mono bg-slate-100 px-1">tv_spend</code>). Optional:{' '}
-                    <code className="font-mono bg-slate-100 px-1">geo</code>, columns containing{' '}
-                    <code className="font-mono bg-slate-100 px-1">control</code>.
+                    Needs a <code className="font-mono bg-slate-100 px-1 rounded">date</code> column, a{' '}
+                    <code className="font-mono bg-slate-100 px-1">revenue</code> column, and spend columns for each channel (e.g.{' '}
+                    <code className="font-mono bg-slate-100 px-1">tv_spend</code>). An optional{' '}
+                    <code className="font-mono bg-slate-100 px-1">geo</code> column enables regional breakdowns.
                   </p>
+                  <CsvFormatGuide />
                 </div>
                 <button
                   type="button"
@@ -311,9 +398,18 @@ export default function DataSourcePanel({ selected, onSelect, onConfirm, isLoadi
                 </button>
               </div>
             ) : (
-              <div className="card card-body text-center py-8 space-y-2">
-                <p className="text-sm text-slate-500 font-medium">No dataset selected yet</p>
-                <p className="text-xs text-slate-400">Pick one from the list and your Load button will appear here.</p>
+              <div className="card card-body space-y-3 py-6">
+                <p className="text-sm font-medium text-slate-700">Start by choosing a dataset</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Not sure which one? <strong className="text-slate-600">Geographic Data</strong> is the best starting point — it includes 4 channels and 3 years of weekly data.
+                </p>
+                <button
+                  disabled
+                  title="Select a dataset on the left to continue"
+                  className="btn-primary w-full justify-center py-3 text-base min-h-[48px] opacity-40 cursor-not-allowed"
+                >
+                  Load Dataset <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
             )}
           </div>

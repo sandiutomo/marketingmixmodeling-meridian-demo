@@ -1,15 +1,15 @@
 'use client'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
 import { getSaturationBadge } from '@/lib/types'
-import type { ChannelResult } from '@/lib/types'
+import type { ChannelResult, DataMethod } from '@/lib/types'
 import { fmtROI, fmtSignedPct } from '@/lib/format'
-import MeridianBadge from '@/components/ui/MeridianBadge'
+import DataMethodBadge from '@/components/ui/DataMethodBadge'
 
 interface ROIBarChartProps {
   data: Array<{ channel: string; roi: number; color?: string; saturationStatus?: ChannelResult['saturationStatus'] }>
   portfolioRoi?: number
   currency?: 'USD' | 'IDR'
-  isReal?: boolean
+  dataMethod?: DataMethod
 }
 
 const CustomTooltip = ({ active, payload, portfolioRoi, currency }: any) => {
@@ -35,7 +35,7 @@ const CustomTooltip = ({ active, payload, portfolioRoi, currency }: any) => {
   return null
 }
 
-export default function ROIBarChart({ data, portfolioRoi, currency = 'USD', isReal }: ROIBarChartProps) {
+export default function ROIBarChart({ data, portfolioRoi, currency = 'USD', dataMethod = 'mock' }: ROIBarChartProps) {
   const sorted = [...data].sort((a, b) => b.roi - a.roi)
   const avg = portfolioRoi ?? (data.reduce((s, d) => s + d.roi, 0) / data.length)
   const strongThreshold = avg * 1.3
@@ -46,9 +46,9 @@ export default function ROIBarChart({ data, portfolioRoi, currency = 'USD', isRe
       <div>
         <div className="flex items-center gap-2">
           <h3 className="font-bold text-slate-900">ROI by Channel</h3>
-          <MeridianBadge isReal={isReal} />
+          <DataMethodBadge method={dataMethod} />
         </div>
-        <p className="text-sm text-slate-500 mt-0.5">Revenue returned for every {currency === 'IDR' ? 'Rp 1,000' : '$1'} of spend, after removing what would have happened without advertising</p>
+        <p className="text-sm text-slate-500 mt-0.5">Revenue per {currency === 'IDR' ? 'Rp 1,000' : '$1'} spent — after removing what would have happened without any ads</p>
       </div>
       <ResponsiveContainer width="100%" height={280}>
         <BarChart data={sorted} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -56,7 +56,7 @@ export default function ROIBarChart({ data, portfolioRoi, currency = 'USD', isRe
           <XAxis dataKey="channel" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => fmtROI(v, currency)} />
           <Tooltip content={<CustomTooltip portfolioRoi={avg} currency={currency} />} />
-          <ReferenceLine y={avg} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: 'avg', position: 'right', fontSize: 10, fill: '#94a3b8' }} />
+          <ReferenceLine y={avg} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: `Portfolio avg: ${fmtROI(avg, currency)}`, position: 'right', fontSize: 10, fill: '#64748b' }} />
           <Bar dataKey="roi" radius={[6, 6, 0, 0]}>
             {sorted.map((entry) => (
               <Cell
@@ -67,10 +67,9 @@ export default function ROIBarChart({ data, portfolioRoi, currency = 'USD', isRe
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <div className="flex items-center gap-4 text-xs text-slate-500">
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-300" /> Dashed line = portfolio average ({fmtROI(avg, currency)})</span>
-        <span className="flex items-center gap-1.5">Channels above average are candidates for more budget; below average are worth reviewing</span>
-      </div>
+      <p className="text-xs text-slate-400 mt-1">
+        Channels above the portfolio average ({fmtROI(avg, currency)}) outperform your portfolio. Channels below may benefit from reallocation.
+      </p>
     </div>
   )
 }

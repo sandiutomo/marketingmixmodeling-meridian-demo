@@ -1,10 +1,14 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { getGeoBreakdown } from '@/lib/api'
+import { getGeoBreakdown, fetchHoldoutDesign } from '@/lib/api'
 import { fmt, fmtROI, fmtSignedPct, fmtPct } from '@/lib/format'
-import type { ModelResults } from '@/lib/types'
+import type { ModelResults, HoldoutDesignResult } from '@/lib/types'
+import { deriveDataMethod } from '@/lib/types'
 import PlanningCycleSummary from '@/components/insights/PlanningCycleSummary'
+import DataMethodBadge from '@/components/ui/DataMethodBadge'
+import DataMethodBanner from '@/components/ui/DataMethodBanner'
+import HoldoutDesignPanel from '@/components/tabs/HoldoutDesignPanel'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 
 interface GeoRow {
@@ -20,6 +24,7 @@ interface GeoRow {
 
 interface Props {
   modelResults: ModelResults | null
+  selectedGeos?: string[]
 }
 
 function roiColor(roi: number, avg: number): string {
@@ -28,14 +33,21 @@ function roiColor(roi: number, avg: number): string {
   return '#4361ee'
 }
 
-export default function GeoBreakdown({ modelResults }: Props) {
+export default function GeoBreakdown({ modelResults, selectedGeos }: Props) {
   const [rows, setRows] = useState<GeoRow[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [holdout, setHoldout] = useState<HoldoutDesignResult | null>(null)
 
   const currency = modelResults?.currency ?? 'USD'
   const nGeos = modelResults?.nGeos ?? 0
+  const dataMethod = rows?.[0]?.isReal ? 'meridian' : deriveDataMethod(modelResults)
+
+  useEffect(() => {
+    if (!modelResults || nGeos <= 1) { setHoldout(null); return }
+    fetchHoldoutDesign().then(setHoldout).catch(() => setHoldout(null))
+  }, [modelResults?.dataSource, nGeos])
 
   useEffect(() => {
     if (!modelResults || nGeos <= 1) return
@@ -43,13 +55,17 @@ export default function GeoBreakdown({ modelResults }: Props) {
     getGeoBreakdown()
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
-          setRows(data)
-          setSelected(data[0].geo)
+          const filtered = selectedGeos && selectedGeos.length > 0
+            ? data.filter((r: GeoRow) => selectedGeos.includes(r.geo))
+            : data
+          const display = filtered.length > 0 ? filtered : data
+          setRows(display)
+          setSelected(display[0].geo)
         } else {
-          setError('No geo-level data available for this dataset.')
+          setError('No regional data for this dataset.')
         }
       })
-      .catch(() => setError('Geo breakdown requires the backend to be running.'))
+      .catch(() => setError("Couldn't load regional data — make sure the backend is running."))
       .finally(() => setLoading(false))
   }, [modelResults?.dataSource])
 
@@ -57,12 +73,12 @@ export default function GeoBreakdown({ modelResults }: Props) {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Geo-Level Performance</h2>
-          <p className="text-slate-500 mt-1">ROI and revenue attribution broken down by geography.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Performance by region</h2>
+          <p className="text-slate-500 mt-1">ROI and revenue by region.</p>
         </div>
         <div className="card card-body text-center py-12">
-          <p className="text-slate-500 text-sm">This dataset uses national-level data — there is no geographic breakdown available.</p>
-          <p className="text-xs text-slate-400 mt-1">Switch to a geo dataset (e.g. Geo Media) in Step 1 to see geo-level results.</p>
+          <p className="text-slate-500 text-sm">This dataset is national — there&apos;s no regional breakdown.</p>
+          <p className="text-xs text-slate-400 mt-1">Choose a multi-region dataset in step 1 to see regional results.</p>
         </div>
       </div>
     )
@@ -74,26 +90,19 @@ export default function GeoBreakdown({ modelResults }: Props) {
 
   return (
     <div className="space-y-6">
+      <DataMethodBanner method={dataMethod} />
       <div>
         <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-2xl font-bold text-slate-900">Geo-Level Performance</h2>
-          {rows && rows[0]?.isReal
-            ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-brand-50 text-brand-700">Meridian posterior</span>
-            : <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Estimated</span>
-          }
+          <h2 className="text-2xl font-bold text-slate-900">Performance by region</h2>
+          <DataMethodBadge method={dataMethod} />
         </div>
-        <p className="text-slate-500 mt-1">ROI and revenue attribution for each geography.</p>
+        <p className="text-slate-500 mt-1">ROI and revenue by region.</p>
       </div>
 
-      {!modelResults && (
-        <div className="px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-          <p className="text-xs font-medium text-amber-700">Run the analysis in Step 2 to see geo-level results.</p>
-        </div>
-      )}
 
       {loading && (
         <div className="card card-body text-center py-12">
-          <p className="text-slate-500 text-sm animate-pulse">Loading geo breakdown...</p>
+          <p className="text-slate-500 text-sm animate-pulse">Loading…</p>
         </div>
       )}
 
@@ -108,13 +117,10 @@ export default function GeoBreakdown({ modelResults }: Props) {
           {/* Portfolio ROI bar chart by geo */}
           <div className="card card-body">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-bold text-slate-900">Portfolio ROI by Geography</h3>
-              {rows[0]?.isReal
-                ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-brand-50 text-brand-700">Meridian posterior</span>
-                : <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Estimated</span>
-              }
+              <h3 className="font-bold text-slate-900">ROI by region</h3>
+              <DataMethodBadge method={dataMethod} />
             </div>
-            <p className="text-sm text-slate-500 mb-4">Average return across all channels, per geo. Bars above the dashed line outperform the portfolio average.</p>
+            <p className="text-sm text-slate-500 mb-4">Average return across all channels per region. Bars above the line are above average.</p>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart
                 data={rows}
@@ -144,14 +150,17 @@ export default function GeoBreakdown({ modelResults }: Props) {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-            <p className="text-xs text-slate-400 mt-1">Click a bar to see that geo's channel breakdown. Portfolio average: {fmtROI(avgRoi, currency)}</p>
+            <p className="text-xs text-slate-400 mt-1">Select a region to see channel-level detail below. Portfolio average: {fmtROI(avgRoi, currency)}</p>
           </div>
 
           {/* Selected geo detail */}
           {selectedRow && (
             <div className="card card-body space-y-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <h3 className="font-bold text-slate-900">{selectedRow.geo} — Channel breakdown</h3>
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Selected</p>
+                  <h3 className="font-bold text-slate-900">{selectedRow.geo} — by channel</h3>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {rows.map(r => (
                     <button
@@ -174,8 +183,8 @@ export default function GeoBreakdown({ modelResults }: Props) {
                 {[
                   { label: 'Total Revenue',   value: fmt(selectedRow.totalRevenue, currency) },
                   { label: 'Media Spend',     value: fmt(selectedRow.totalSpend, currency) },
-                  { label: 'Portfolio ROI',   value: fmtROI(selectedRow.portfolioRoi, currency) },
-                  { label: 'vs Portfolio Avg',
+                  { label: 'Avg ROI',          value: fmtROI(selectedRow.portfolioRoi, currency) },
+                  { label: 'vs average',
                     value: fmtSignedPct((selectedRow.portfolioRoi / avgRoi - 1) * 100),
                     highlight: selectedRow.portfolioRoi >= avgRoi,
                   },
@@ -196,7 +205,7 @@ export default function GeoBreakdown({ modelResults }: Props) {
                       <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">ROI</th>
                       <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">Spend</th>
                       <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">Revenue</th>
-                      <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">vs Total</th>
+                      <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">vs avg</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-surface-100">
@@ -229,14 +238,14 @@ export default function GeoBreakdown({ modelResults }: Props) {
 
           {/* Ranked summary table */}
           <div className="card card-body">
-            <h3 className="font-bold text-slate-900 mb-3">All Geos Ranked by ROI</h3>
+            <h3 className="font-bold text-slate-900 mb-3">All regions ranked</h3>
             <div className="overflow-hidden rounded-xl border border-surface-200">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-surface-50 text-left">
                     <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">#</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">Geography</th>
-                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">Portfolio ROI</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">Region</th>
+                    <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">Avg ROI</th>
                     <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">Revenue</th>
                     <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">Spend</th>
                     <th className="px-4 py-2.5 text-xs font-semibold text-slate-500">vs Average</th>
@@ -270,6 +279,13 @@ export default function GeoBreakdown({ modelResults }: Props) {
             </div>
           </div>
         </>
+      )}
+
+      {/* Holdout / lift test design — only shown for multi-geo datasets */}
+      {nGeos > 1 && holdout && (
+        <div className="card card-body">
+          <HoldoutDesignPanel data={holdout} currency={currency} />
+        </div>
       )}
 
       {modelResults && (

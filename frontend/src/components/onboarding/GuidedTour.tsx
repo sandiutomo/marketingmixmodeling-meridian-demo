@@ -1,35 +1,42 @@
 'use client'
 import { useState } from 'react'
-import { X, ChevronRight, ChevronLeft, Database, Settings2, TrendingUp, BarChart3 } from 'lucide-react'
+import { X, ChevronRight, ChevronLeft, Database, Settings2, TrendingUp, BarChart3, Layers } from 'lucide-react'
 
 const STEPS = [
   {
     icon: BarChart3,
     subtitle: 'Welcome',
-    title: 'See how your marketing actually works',
-    body: 'Marketing Mix Model Studio uses Google Meridian to show you how your marketing actually works. Unlike last-click attribution, MMM measures the real contribution of every channel, including TV and radio, backed by statistical evidence.',
+    title: 'See what your marketing is actually doing',
+    body: 'This platform uses Google Meridian — Google\'s open-source Bayesian MMM framework — to estimate the causal contribution of every channel, including TV and radio. It gives you a confidence range per channel, not just a single number, so you know how much to trust each estimate.',
     tip: null,
   },
   {
     icon: Database,
     subtitle: 'Step 1',
-    title: 'Pick your dataset',
-    body: 'Choose a sample dataset that matches your setup: geographic data, data with reach and frequency tracking, data with organic factors, or simple national data. Click a card to expand it, preview the columns, then click "Load" on the right.',
-    tip: 'Tip: Expand a card to preview the first 100 rows and see which channels are included.',
+    title: 'Pick a dataset',
+    body: 'Choose a sample dataset that fits your setup: multi-region, national, reach & frequency, organic media, or upload your own CSV. The Geographic Data dataset is the best starting point — it has 4 channels and 3 years of weekly data across 20 regions.',
+    tip: 'Tip: Expand a card to see which channels are included and preview the first 100 rows.',
   },
   {
     icon: Settings2,
     subtitle: 'Step 2',
-    title: 'Configure and run the model',
-    body: 'Set your date range, regions, and channels. Click "Apply Configuration" then "Run Model." The model uses Bayesian statistics to estimate ROI for each channel with confidence ranges, not just single numbers.',
-    tip: 'Tip: The default settings work well. You don\'t need to change them for a meaningful result.',
+    title: 'Configure and run',
+    body: 'Set your date range, regions, and channels. Advanced options let you tune carryover windows, prior beliefs per channel, holdout validation, non-revenue KPI mode, and reach & frequency optimization. Apply the configuration, then run the model.',
+    tip: 'Tip: Default settings work for most datasets. The generated Python code updates live as you change settings — click "Show generated code" to see exactly what Meridian will run.',
   },
   {
     icon: TrendingUp,
     subtitle: 'Step 3',
-    title: 'Explore your insights',
-    body: 'Five tabs show different angles: Budget Allocation (ROI per dollar), Measuring True ROI (confidence ranges), Scenario Planning (what-if modeling), Channel Contribution (revenue attribution), and Cross-Channel Impact (how channels amplify each other).',
-    tip: 'Tip: Start with Budget Allocation, then Scenario Planning to model a real budget shift.',
+    title: 'Explore your results',
+    body: 'Six tabs show different views of your model output. Each tab has a "Generate" button that fetches live results from the Meridian posterior — ROI with CI bands, mROI, CPIK, saturation curves, synergy, geo breakdown, and budget optimization.',
+    tip: 'Tip: Suggested order — Channel ROI → Budget → Contribution → Scenarios → Synergy → Geography. Export your results as CSV (for Looker Studio) or HTML report from the Export button.',
+  },
+  {
+    icon: Layers,
+    subtitle: 'Step 4',
+    title: 'Advanced features',
+    body: 'Model Diagnostics shows R-hat convergence, prior vs posterior shift, and model fit over time. Scenario Planning lets you save and restore named budget scenarios. The Budget tab supports three optimizer modes: fixed budget, target ROI, and target marginal ROI.',
+    tip: 'Tip: Run the model with a real dataset to unlock the Bayesian posterior features — R-hat boxplot, prior/posterior density curves, and Hill saturation parameters.',
   },
 ]
 
@@ -44,7 +51,7 @@ export default function GuidedTour({ onClose }: { onClose: () => void }) {
         {/* Progress bar */}
         <div className="flex gap-1.5 px-6 pt-5">
           {STEPS.map((_, i) => (
-            <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i <= step ? 'bg-brand-500' : 'bg-surface-200'}`} />
+            <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i <= step ? 'bg-gradient-to-r from-brand-700 to-brand-500' : 'bg-surface-200'}`} />
           ))}
         </div>
 

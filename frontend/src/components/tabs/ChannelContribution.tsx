@@ -1,11 +1,17 @@
 'use client'
-import { useState, useMemo } from 'react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { useState, useMemo, useEffect } from 'react'
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import PlanningCycleSummary from '@/components/insights/PlanningCycleSummary'
-import MeridianBadge from '@/components/ui/MeridianBadge'
-import type { ModelResults } from '@/lib/types'
-import { getSaturationBadge } from '@/lib/types'
+import DataMethodBadge from '@/components/ui/DataMethodBadge'
+import DataMethodBanner from '@/components/ui/DataMethodBanner'
+import WaterfallChart from '@/components/charts/WaterfallChart'
+import type { ModelResults, WaterfallResult, TimePeriod } from '@/lib/types'
+import { getSaturationBadge, deriveDataMethod } from '@/lib/types'
 import { fmt, fmtROI, fmtPct } from '@/lib/format'
+import SectionTooltip from '@/components/ui/SectionTooltip'
+import { fetchWaterfall } from '@/lib/api'
+import BumpChart from '@/components/charts/BumpChart'
+import type { BumpDataPoint } from '@/components/charts/BumpChart'
 
 // Deterministic noise seeded by week index — no Math.random() so values are stable across renders
 function deterministicNoise(seed: number, amplitude: number): number {
@@ -49,7 +55,16 @@ function getChannelDescription(label: string, role: string, roi: number, portfol
 
 export default function ChannelContribution({ modelResults }: { modelResults: ModelResults | null }) {
   const [period, setPeriod] = useState<Period>('full')
+  const [chartView, setChartView] = useState<'stacked' | 'individual'>('stacked')
   const currency = modelResults?.currency ?? 'USD'
+  const dataMethod = deriveDataMethod(modelResults)
+  const [waterfallPeriod, setWaterfallPeriod] = useState<TimePeriod>('quarterly')
+  const [waterfall, setWaterfall] = useState<WaterfallResult | null>(null)
+
+  useEffect(() => {
+    if (!modelResults) { setWaterfall(null); return }
+    fetchWaterfall(waterfallPeriod).then(setWaterfall).catch(() => setWaterfall(null))
+  }, [modelResults, waterfallPeriod])
 
   const allWeeklyData = modelResults
     ? modelResults.weeklyData.map((d, i) => ({ ...d, weekIndex: i }))
@@ -96,63 +111,101 @@ export default function ChannelContribution({ modelResults }: { modelResults: Mo
 
   return (
     <div className="space-y-6">
+      <DataMethodBanner method={dataMethod} />
       <div>
-        <h2 className="text-2xl font-bold text-slate-900">What is each channel actually contributing?</h2>
-        <p className="text-slate-500 mt-1">See exactly how much revenue each channel is driving, based on real impact rather than coincidence of timing.</p>
-      </div>
-
-      {!modelResults && (
-        <div className="px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-          <p className="text-xs font-medium text-amber-700">Sample data — run the analysis in Step 2 to see real numbers for your channels.</p>
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-slate-900">How much is each channel contributing?</h2>
+          <SectionTooltip content="Shows the share of total revenue each channel caused, not just correlated with. The model separates media-driven revenue from organic baseline (word of mouth, repeat customers, branded search) so you can see what advertising is actually worth." />
         </div>
-      )}
+        <p className="text-slate-500 mt-1">Revenue attributed to each channel — based on causal impact, not just timing coincidence.</p>
+      </div>
 
       <div className="card card-body">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-slate-900">Revenue Attribution Over Time</h3>
-              <MeridianBadge isReal={modelResults?.isRealMeridian} />
+              <DataMethodBadge method={dataMethod} />
+              <SectionTooltip content="Breaks down weekly revenue into the share each channel caused. Useful for spotting seasonal patterns, identifying which channels drove growth in specific periods, and checking whether any channel's contribution is declining over time." />
             </div>
             <p className="text-sm text-slate-500 mt-0.5">How each channel contributed to weekly revenue</p>
           </div>
-          <div className="flex items-center gap-1 p-1 bg-surface-100 rounded-lg shrink-0">
-            {(Object.keys(periodLabels) as Period[]).map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${period === p ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                title={periodLabels[p]}>
-                {p === 'full' ? 'All' : p.toUpperCase()}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* View toggle */}
+            <div className="flex items-center gap-1 p-1 bg-surface-100 rounded-lg text-xs font-medium">
+              {(['stacked', 'individual'] as const).map(v => (
+                <button key={v} onClick={() => setChartView(v)}
+                  className={`px-2.5 py-1 rounded-md transition-all ${chartView === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  title={v === 'stacked' ? 'Stacked area chart' : 'Individual channel lines (easier comparison)'}>
+                  {v === 'stacked' ? 'Stacked' : 'Individual'}
+                </button>
+              ))}
+            </div>
+            {/* Period filter */}
+            <div className="flex items-center gap-1 p-1 bg-surface-100 rounded-lg shrink-0">
+              {(Object.keys(periodLabels) as Period[]).map(p => (
+                <button key={p} onClick={() => setPeriod(p)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${period === p ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  title={periodLabels[p]}>
+                  {p === 'full' ? 'All' : p.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {/* Active period date range */}
         <p className="text-xs text-slate-400 mb-3">{periodLabels[period]}</p>
-        <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="grad-Base" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#fde68a" stopOpacity={0.95} />
-                <stop offset="100%" stopColor="#fde68a" stopOpacity={0.85} />
-              </linearGradient>
-              {paidChannels.map(({ key, color }) => (
-                <linearGradient key={key} id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.90} />
-                  <stop offset="100%" stopColor={color} stopOpacity={0.75} />
+
+        {chartView === 'stacked' ? (
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="grad-Base" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#fde68a" stopOpacity={0.95} />
+                  <stop offset="100%" stopColor="#fde68a" stopOpacity={0.85} />
                 </linearGradient>
+                {paidChannels.map(({ key, color }) => (
+                  <linearGradient key={key} id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity={0.90} />
+                    <stop offset="100%" stopColor={color} stopOpacity={0.75} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f3f7" />
+              <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} interval={period === 'full' ? 7 : 2} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={v => fmt(v, currency)} />
+              <Tooltip formatter={(v: number, name: string) => [fmt(v, currency), name === 'Base' ? 'Organic baseline' : name]} />
+              <Area type="monotone" dataKey="Base" stackId="1" stroke="#d97706" strokeWidth={1.5} fill="url(#grad-Base)" fillOpacity={1} />
+              {paidChannels.map(({ key, color }) => (
+                <Area key={key} type="monotone" dataKey={key} stackId="1" stroke={color} strokeWidth={0.5} fill={`url(#grad-${key})`} fillOpacity={1} />
               ))}
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f3f7" />
-            <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} interval={period === 'full' ? 7 : 2} />
-            <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={v => fmt(v, currency)} />
-            <Tooltip formatter={(v: number, name: string) => [fmt(v, currency), name === 'Base' ? 'Organic baseline' : name]} />
-            {/* Base first = bottom of stack */}
-            <Area type="monotone" dataKey="Base" stackId="1" stroke="#d97706" strokeWidth={1.5} fill="url(#grad-Base)" fillOpacity={1} />
-            {paidChannels.map(({ key, color }) => (
-              <Area key={key} type="monotone" dataKey={key} stackId="1" stroke={color} strokeWidth={0.5} fill={`url(#grad-${key})`} fillOpacity={1} />
-            ))}
-          </AreaChart>
-        </ResponsiveContainer>
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          /* Individual channels — small multiples in 2-column grid */
+          <div>
+            <p className="text-xs text-slate-400 mb-3">Each channel shown on its own scale for accurate comparison. <span className="text-brand-500">Tip: stacked view can distort upper bands.</span></p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {paidChannels.map(({ key, color }) => {
+                const label = modelResults ? (modelResults.channels.find(c => c.channel === key)?.label ?? key) : key
+                return (
+                  <div key={key}>
+                    <p className="text-xs font-semibold mb-1" style={{ color }}>{label}</p>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f3f7" />
+                        <XAxis dataKey="week" tick={{ fontSize: 8, fill: '#94a3b8' }} interval={period === 'full' ? 7 : 2} />
+                        <YAxis tick={{ fontSize: 8, fill: '#94a3b8' }} tickFormatter={v => fmt(v, currency)} width={52} />
+                        <Tooltip formatter={(v: number) => [fmt(v, currency), label]} />
+                        <Line type="monotone" dataKey={key} stroke={color} strokeWidth={1.5} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Legend — two clearly separated groups */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
@@ -171,10 +224,87 @@ export default function ChannelContribution({ modelResults }: { modelResults: Mo
         </div>
 
         <details className="mt-4">
-          <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">How was this calculated?</summary>
-          <p className="text-xs text-slate-500 mt-2 leading-relaxed">Each channel's weekly contribution is Meridian's estimate of revenue caused by that channel's spend — sales that happened <em>because</em> of that spending, not sales that would have occurred anyway. "Base" represents organic revenue: brand reputation, word-of-mouth, and everything outside your paid media.</p>
+          <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">How is this calculated?</summary>
+          <p className="text-xs text-slate-500 mt-2 leading-relaxed">Each channel&apos;s contribution is the model&apos;s estimate of revenue it caused — sales that happened because of that spend, not sales that would have happened anyway. &quot;Base&quot; is organic revenue: brand equity, word-of-mouth, and everything outside paid media.</p>
         </details>
       </div>
+
+      {/* Seasonality peak annotations */}
+      {(() => {
+        const allData = allWeeklyData
+        if (allData.length < 8) return null
+        const channelKeys = paidChannels.map(ch => ch.key)
+
+        // Compute total paid media per week
+        const totals = allData.map(d =>
+          channelKeys.reduce((s, k) => s + ((d as Record<string, unknown>)[k] as number ?? 0), 0)
+        )
+
+        // Rolling 7-week average
+        const rolling = totals.map((_, i) => {
+          const w = totals.slice(Math.max(0, i - 3), Math.min(totals.length, i + 4))
+          return w.reduce((s, v) => s + v, 0) / w.length
+        })
+
+        // Peaks: weeks that are ≥25% above the rolling average AND are local maxima
+        const peaks = allData
+          .map((d, i) => {
+            const total = totals[i]
+            const avg   = rolling[i]
+            if (avg === 0 || total < avg * 1.25) return null
+            // Local maximum check (within ±3 weeks)
+            const window = totals.slice(Math.max(0, i - 3), Math.min(totals.length, i + 4))
+            if (total < Math.max(...window)) return null
+            // Find dominant channel
+            const dominant = channelKeys.reduce((best, k) => {
+              const v = (d as Record<string, unknown>)[k] as number ?? 0
+              return v > ((d as Record<string, unknown>)[best] as number ?? 0) ? k : best
+            }, channelKeys[0])
+            const dominantLabel = modelResults
+              ? (modelResults.channels.find(c => c.channel === dominant)?.label ?? dominant)
+              : dominant
+            const dominantColor = paidChannels.find(c => c.key === dominant)?.color ?? '#4361ee'
+            const liftPct = Math.round((total / avg - 1) * 100)
+            return {
+              week: (d as Record<string, unknown>).week as string ?? `W${i + 1}`,
+              total,
+              liftPct,
+              dominant: dominantLabel,
+              dominantColor,
+            }
+          })
+          .filter(Boolean)
+          .slice(0, 6) as { week: string; total: number; liftPct: number; dominant: string; dominantColor: string }[]
+
+        if (peaks.length === 0) return null
+
+        return (
+          <div className="card card-body">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-bold text-slate-900">Seasonality peaks detected</h3>
+              <SectionTooltip content="Weeks where total media contribution was at least 25% above the rolling 7-week average. These spikes often correspond to campaign launches, promotions, or seasonal events. The dominant channel is the one that drove the most revenue in that week." />
+            </div>
+            <p className="text-sm text-slate-500 mb-4">Weeks where your media spend significantly over-delivered vs the rolling baseline, and which channel drove each spike.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {peaks.map(pk => (
+                <div key={pk.week} className="flex items-start gap-3 p-3 rounded-xl border border-surface-200 bg-white">
+                  <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: pk.dominantColor }}>
+                    ↑
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">{pk.week}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      <span className="font-semibold text-emerald-600">+{pk.liftPct}%</span> vs rolling avg
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">Led by <span className="font-medium" style={{ color: pk.dominantColor }}>{pk.dominant}</span></p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 mt-3">Peaks are weeks at least 25% above a ±3-week rolling average that are also local maxima in the selected period. Useful for anchoring campaign calendars to historically high-performance windows.</p>
+          </div>
+        )
+      })()}
 
       {channelRoles.length > 0 && (
         <div>
@@ -196,6 +326,65 @@ export default function ChannelContribution({ modelResults }: { modelResults: Mo
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* Bump chart — channel rank over time */}
+      {paidChannels.length > 1 && (() => {
+        // Build quarterly rank data from allWeeklyData
+        const quarters = [
+          { label: 'Q1', range: [0, 12] as [number, number] },
+          { label: 'Q2', range: [13, 25] as [number, number] },
+          { label: 'Q3', range: [26, 38] as [number, number] },
+          { label: 'Q4', range: [39, 51] as [number, number] },
+        ].filter(q => q.range[1] < allWeeklyData.length)
+
+        if (quarters.length < 2) return null
+
+        const bumpData: BumpDataPoint[] = quarters.map(q => {
+          const slice = allWeeklyData.slice(q.range[0], q.range[1] + 1)
+          const totals: Record<string, number> = {}
+          paidChannels.forEach(ch => {
+            totals[ch.key] = slice.reduce((s, w) => s + ((w as Record<string, unknown>)[ch.key] as number ?? 0), 0)
+          })
+          // Rank: 1 = highest contribution
+          const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1])
+          const ranks: BumpDataPoint = { period: q.label }
+          sorted.forEach(([key], i) => { ranks[key] = i + 1 })
+          return ranks
+        })
+
+        const bumpChannels = paidChannels.map(ch => ({
+          key: ch.key,
+          label: modelResults ? (modelResults.channels.find(c => c.channel === ch.key)?.label ?? ch.key) : ch.key,
+          color: ch.color,
+        }))
+
+        return (
+          <div className="card card-body">
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="font-bold text-slate-900 text-sm">Channel Contribution Rank Over Time</h3>
+              <SectionTooltip content="Shows which channels lead or fall behind in each quarter. A channel moving from rank 3 to rank 1 over the year is growing in importance — useful for spotting seasonal dominance before budget planning." />
+            </div>
+            <BumpChart data={bumpData} channels={bumpChannels} />
+          </div>
+        )
+      })()}
+
+      {/* Waterfall — period-over-period breakdown */}
+      {waterfall && (
+        <div className="card card-body">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-1 p-1 bg-surface-100 rounded-lg">
+              {(['weekly', 'monthly', 'quarterly', 'yearly'] as TimePeriod[]).map(p => (
+                <button key={p} onClick={() => setWaterfallPeriod(p)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${waterfallPeriod === p ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <WaterfallChart data={waterfall} currency={currency} />
         </div>
       )}
 

@@ -21,27 +21,41 @@ import {
   getAdstockParams,
   startModelJob,
   getModelJobStatus,
+  fetchModelFit,
 } from '@/lib/api'
-import type { DataSourceType, ModelConfig, ModelResults, UploadedDataSummary } from '@/lib/types'
+import type { DataSourceType, ModelConfig, ModelResults, UploadedDataSummary, ModelFitResult } from '@/lib/types'
+import ModelFitChart from '@/components/charts/ModelFitChart'
+import { deriveDataMethod } from '@/lib/types'
+import DataMethodBadge from '@/components/ui/DataMethodBadge'
 import GuidedTour from '@/components/onboarding/GuidedTour'
 import GlossaryPanel from '@/components/onboarding/GlossaryPanel'
 import ModelDiagnosticsPanel from '@/components/model/ModelDiagnosticsPanel'
 import {
   AlertTriangle, X,
-  Loader2, ChevronLeft, Share2, ShieldCheck, Lock, BarChart2,
+  Loader2, ChevronLeft, ChevronRight, Share2, ShieldCheck, Lock, BarChart2,
 } from 'lucide-react'
 import { fmtPct } from '@/lib/format'
+import SectionTooltip from '@/components/ui/SectionTooltip'
+
+const DATASET_LABELS: Record<string, string> = {
+  geo_no_rf:   'Geographic Data',
+  geo_with_rf: 'Geographic + Reach & Frequency',
+  geo_organic: 'Geographic + Organic & Non-Media',
+  national:    'National Data',
+  indonesia:   'Indonesia Market',
+  custom_csv:  'Custom CSV',
+}
 
 type AppStep = 'data' | 'config' | 'insights'
 type InsightTab = 'budget' | 'roi' | 'scenario' | 'contribution' | 'cross' | 'geo'
 
 const TABS: { id: InsightTab; label: string }[] = [
-  { id: 'budget', label: 'Budget Allocation' },
-  { id: 'roi', label: 'Measuring True ROI' },
-  { id: 'scenario', label: 'Scenario Planning' },
-  { id: 'contribution', label: 'Channel Contribution' },
-  { id: 'cross', label: 'Cross-channel Impact' },
-  { id: 'geo', label: 'Geo Breakdown' },
+  { id: 'budget', label: 'Budget' },
+  { id: 'roi', label: 'Channel ROI' },
+  { id: 'scenario', label: 'Scenarios' },
+  { id: 'contribution', label: 'Contribution' },
+  { id: 'cross', label: 'Synergy' },
+  { id: 'geo', label: 'Geography' },
 ]
 
 function buildRunModelCode(c: ModelConfig | null): string {
@@ -130,7 +144,12 @@ export default function Home() {
   const [uploadSummary, setUploadSummary] = useState<UploadedDataSummary | null>(null)
   const [uploadTimespan, setUploadTimespan] = useState<{ start: string | null; end: string | null } | null>(null)
   const [jobProgress, setJobProgress] = useState<string | null>(null)
+  const [jobProgressPct, setJobProgressPct] = useState<number | null>(null)
   const [showAttributionVsMmmCard, setShowAttributionVsMmmCard] = useState(true)
+  const [tabOrderDismissed, setTabOrderDismissed] = useState(() =>
+    typeof window !== 'undefined' && !!localStorage.getItem('mmm_tab_order_dismissed')
+  )
+  const [modelFitData, setModelFitData] = useState<ModelFitResult | null>(null)
 
   const runModelCode = useMemo(() => buildRunModelCode(appliedConfig), [appliedConfig])
 
@@ -186,6 +205,7 @@ export default function Home() {
 
   const handleReset = () => {
     setJobProgress(null)
+    setJobProgressPct(null)
     setShowDiagnostics(modelResults !== null)
     setAppStep('config')
   }
@@ -206,7 +226,7 @@ export default function Home() {
     <div className="min-h-screen bg-surface-50">
       <Header currentStep={currentStepNum} backendOnline={backendOnline} />
       <div className="max-w-screen-xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <DemoDisclaimer />
+        <DemoDisclaimer datasetName={selectedData ? DATASET_LABELS[selectedData] : undefined} />
 
         {backendWarning && (
           <div className="flex items-start gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
@@ -233,106 +253,149 @@ export default function Home() {
         {appStep === 'config' && (
           <div className="space-y-4">
             <button onClick={() => setAppStep('data')} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors">
-              <ChevronLeft className="w-4 h-4" /> Back to data selection
+              <ChevronLeft className="w-4 h-4" /> Change data
             </button>
-            <div className="space-y-4">
-              <ModelConfigPanel
-                key={`${selectedData}-${uploadSummary?.n_times ?? 0}`}
-                onApply={handleConfigureModel}
-                isLoading={isConfiguringModel}
-                selectedData={selectedData ?? 'geo_no_rf'}
-                uploadSummary={uploadSummary}
-                uploadTimespan={uploadTimespan}
-              />
-
-              <div className="card card-body space-y-4">
-                <div>
-                  <h3 className="font-bold text-slate-900 mb-0.5">Run Analysis</h3>
-                  <p className="text-sm text-slate-500">Calculates ROI, revenue attribution, and confidence ranges for each channel.</p>
+            <div className="space-y-0">
+              {/* Step 1 — Configure */}
+              <div className="flex gap-3 sm:gap-4">
+                <div className="flex flex-col items-center pt-1 shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-brand-500 text-white text-xs font-bold flex items-center justify-center shadow-sm">1</div>
+                  <div className="w-px flex-1 bg-surface-200 mt-1.5 mb-0" />
                 </div>
-
-                {!appliedConfig && (
-                  <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    Apply your configuration above before running the analysis.
-                  </div>
-                )}
-
-                {appliedConfig && (
-                  <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
-                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                    Configuration applied — {appliedConfig.channels.length} channels, {appliedConfig.startDate} to {appliedConfig.endDate}. Ready to run.
-                  </div>
-                )}
-
-                {jobProgress && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                    {jobProgress}
-                  </div>
-                )}
-
-                <CodeExecutionButton
-                  label="Run Model"
-                  tooltip="Background job: sample_prior → sample_posterior → Analyzer (same as meridian_runner.py)."
-                  whyItMatters={'This gives you confidence ranges, not just a single number. Instead of one ROI point, you get a credible range so you know how much to trust the estimate before shifting budget.'}
-                  code={runModelCode}
-                  disabled={!appliedConfig}
-                  onExecute={async () => {
-                    console.log('[App] Starting model job...')
-                    setJobProgress(null)
-                    try {
-                      const { job_id } = await startModelJob()
-                      for (;;) {
-                        const st = await getModelJobStatus(job_id)
-                        setJobProgress(st.message || `${st.status} ${st.progress != null ? Math.round(st.progress) + '%' : ''}`)
-                        if (st.status === 'complete') break
-                        if (st.status === 'error' || st.status === 'unknown') {
-                          throw new Error(st.error || st.message || 'Job failed')
-                        }
-                        await new Promise(r => setTimeout(r, 1200))
-                      }
-                      console.log('[App] ✅ Model job complete')
-                    } catch (e) {
-                      console.warn('[App] Model job failed — falling back to sync or demo', e)
-                      setJobProgress(null)
-                      setBackendWarning(
-                        e instanceof Error
-                          ? `Job failed (${e.message}). If the API is older, ensure POST /model/run/start exists.`
-                          : 'Background job failed.'
-                      )
-                    }
-                    if (selectedData) {
-                      setIsComputingResults(true)
-                      fetchComputedResults(selectedData, appliedConfig ?? undefined).then(async r => {
-                        const [hillParams, adstockParams] = await Promise.all([
-                          getHillParams().catch(() => null),
-                          getAdstockParams().catch(() => null),
-                        ])
-                        setModelResults({
-                          ...r,
-                          ...(hillParams   ? { hillParams }   : {}),
-                          ...(adstockParams ? { adstockParams } : {}),
-                        })
-                      }).catch(() => {}).finally(() => { setIsComputingResults(false); setJobProgress(null) })
-                    }
-                    setShowDiagnostics(true)
-                  }}
-                  successMessage="Model complete — review diagnostics below, then continue."
-                />
-
-                {/* Continue to Results CTA — only shown after diagnostics are visible */}
-                {showDiagnostics && (
-                  <button
-                    onClick={() => setAppStep('insights')}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl transition-colors"
-                  >
-                    View Results →
-                  </button>
-                )}
+                <div className="flex-1 pb-4">
+                  <ModelConfigPanel
+                    key={`${selectedData}-${uploadSummary?.n_times ?? 0}`}
+                    onApply={handleConfigureModel}
+                    isLoading={isConfiguringModel}
+                    selectedData={selectedData ?? 'geo_no_rf'}
+                    uploadSummary={uploadSummary}
+                    uploadTimespan={uploadTimespan}
+                  />
+                </div>
               </div>
 
-              {showDiagnostics && <ModelDiagnosticsPanel modelResults={modelResults} />}
+              {/* Step 2 — Run */}
+              <div className="flex gap-3 sm:gap-4">
+                <div className="flex flex-col items-center pt-1 shrink-0">
+                  <div className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shadow-sm transition-colors ${appliedConfig ? 'bg-brand-500 text-white' : 'bg-surface-200 text-slate-400'}`}>2</div>
+                  <div className="w-px flex-1 bg-surface-200 mt-1.5 mb-0" />
+                </div>
+                <div className="flex-1 pb-4">
+                  <div className="card card-body space-y-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="font-bold text-slate-900">Run the model</h3>
+                        <SectionTooltip content="Executes Bayesian MCMC sampling across 4 independent chains. The result is a posterior distribution, which is the source of your confidence ranges. A point estimate says '3.2x'; the posterior says '90% chance it's between 2.4x and 4.1x'." />
+                      </div>
+                      <p className="text-sm text-slate-500">Estimates each channel's true contribution to revenue, including confidence ranges for every number.</p>
+                    </div>
+
+                    {!appliedConfig && (
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        Set your configuration above, then come back here to run the model.
+                      </div>
+                    )}
+
+                    {appliedConfig && (
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                        <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                        Ready — {appliedConfig.channels.length} channels · {appliedConfig.startDate} to {appliedConfig.endDate}
+                      </div>
+                    )}
+
+                    <CodeExecutionButton
+                      label="Run the model"
+                      tooltip="Runs as a background job: sample_prior → sample_posterior → Analyzer."
+                      whyItMatters={'This gives you confidence ranges, not just a single number. Instead of one ROI point, you get a credible range so you know how much to trust the estimate before shifting budget.'}
+                      code={runModelCode}
+                      disabled={!appliedConfig}
+                      statusText={jobProgress ?? null}
+                      externalProgress={jobProgressPct ?? null}
+                      onExecute={async () => {
+                        console.log('[App] Starting model job...')
+                        setJobProgress(null)
+                        try {
+                          const { job_id } = await startModelJob()
+                          for (;;) {
+                            const st = await getModelJobStatus(job_id)
+                            setJobProgress(st.message || `${st.status} ${st.progress != null ? Math.round(st.progress) + '%' : ''}`)
+                            setJobProgressPct(st.progress != null ? Math.round(st.progress) : null)
+                            if (st.status === 'complete') break
+                            if (st.status === 'error' || st.status === 'unknown') {
+                              throw new Error(st.error || st.message || 'Job failed')
+                            }
+                            await new Promise(r => setTimeout(r, 1200))
+                          }
+                          console.log('[App] Model job complete')
+                        } catch (e) {
+                          console.warn('[App] Model job failed — falling back to sync or demo', e)
+                          setJobProgress(null)
+                          setBackendWarning(
+                            e instanceof Error
+                              ? `Job failed (${e.message}). If the API is older, ensure POST /model/run/start exists.`
+                              : 'Background job failed.'
+                          )
+                        }
+                        if (selectedData) {
+                          setIsComputingResults(true)
+                          fetchComputedResults(selectedData, appliedConfig ?? undefined).then(async r => {
+                            const [hillParams, adstockParams] = await Promise.all([
+                              getHillParams().catch(() => null),
+                              getAdstockParams().catch(() => null),
+                            ])
+                            setModelResults({
+                              ...r,
+                              ...(hillParams   ? { hillParams }   : {}),
+                              ...(adstockParams ? { adstockParams } : {}),
+                            })
+                          }).catch(() => {}).finally(() => { setIsComputingResults(false); setJobProgress(null); setJobProgressPct(null) })
+                        }
+                        setShowDiagnostics(true)
+                        fetchModelFit().then(setModelFitData).catch(() => {})
+                      }}
+                      successMessage="Done. Check the diagnostics below, then continue to your results."
+                    />
+
+                    {jobProgress !== null && (
+                      <p className="text-xs text-slate-400 text-center">
+                        Estimated time: 2–5 minutes based on your sampling settings. Most runs finish within this range.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3 — Model Fit (conditional) */}
+              {showDiagnostics && modelFitData && (
+                <div className="flex gap-3 sm:gap-4">
+                  <div className="flex flex-col items-center pt-1 shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-brand-500 text-white text-xs font-bold flex items-center justify-center shadow-sm">3</div>
+                    <div className="w-px flex-1 bg-surface-200 mt-1.5 mb-0" />
+                  </div>
+                  <div className="flex-1 pb-4">
+                    <div className="card card-body space-y-2">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900 text-sm">Model Fit</h3>
+                        <SectionTooltip content="This chart is your model's report card. The black line is what actually happened each week. The orange dashed line is what the model predicted. The closer they track together, the better the model has learned your campaign patterns. The shaded area is the model's confidence band: 90% of the time it expects the true value to fall within that range. A model that fits well here will give you more trustworthy ROI and budget numbers on the next screen." />
+                      </div>
+                      <ModelFitChart data={modelFitData} currency={modelResults?.currency ?? 'USD'} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4 — Diagnostics (conditional) */}
+              {showDiagnostics && (
+                <div className="flex gap-3 sm:gap-4">
+                  <div className="flex flex-col items-center pt-1 shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-brand-500 text-white text-xs font-bold flex items-center justify-center shadow-sm">{modelFitData ? 4 : 3}</div>
+                  </div>
+                  <div className="flex-1 pb-4">
+                    <ModelDiagnosticsPanel modelResults={modelResults} onContinue={() => setAppStep('insights')} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -343,43 +406,28 @@ export default function Home() {
             {/* Top bar: back + freshness + model quality + export */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <button onClick={handleReset} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors shrink-0">
-                <ChevronLeft className="w-4 h-4" /> Back to model setup
+                <ChevronLeft className="w-4 h-4" /> Back to setup
               </button>
               <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-                {/* Data freshness — shows configured date range once computed */}
+                {/* Data freshness — dataset + date range once computed */}
                 <span className="text-xs text-slate-400 bg-white border border-surface-200 px-2.5 py-1 rounded-lg">
+                  {selectedData ? <span className="font-medium text-slate-500">{DATASET_LABELS[selectedData] ?? selectedData}</span> : null}
+                  {selectedData ? ' · ' : null}
                   {modelResults
                     ? `${modelResults.dateRange} · ${modelResults.nGeos} geo${modelResults.nGeos !== 1 ? 's' : ''} · ${modelResults.channels.length} channels`
                     : appliedConfig
                       ? `${appliedConfig.startDate} to ${appliedConfig.endDate} · computing…`
                       : 'Computing…'}
                 </span>
-                {/* Model quality — "Strong" only when real Meridian posterior ran */}
-                {modelResults ? (
-                  modelResults.isRealMeridian ? (
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg shadow-sm">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      Model quality: Strong
-                      <span className="text-green-500 font-normal hidden sm:inline">
-                        · {fmtPct(modelResults.rSquared * 100, 0)} R²
-                        · MAPE {fmtPct(modelResults.mape * 100)}
-                      </span>
+                {/* Data method indicator */}
+                <span className="flex items-center">
+                  <DataMethodBadge method={deriveDataMethod(modelResults)} />
+                  {modelResults?.isRealMeridian && (
+                    <span className="text-xs text-green-500 font-normal ml-1.5 hidden sm:inline">
+                      {fmtPct(modelResults.rSquared * 100, 0)} R² · MAPE {fmtPct(modelResults.mape * 100)}
                     </span>
-                  ) : (
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      Model quality: Estimated
-                      <span className="text-amber-500 font-normal hidden sm:inline">
-                        · {fmtPct(modelResults.rSquared * 100, 0)} R²
-                      </span>
-                    </span>
-                  )
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-surface-100 border border-surface-200 px-2.5 py-1 rounded-lg">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    Model quality: pending
-                  </span>
-                )}
+                  )}
+                </span>
                 {/* Export */}
                 <button onClick={() => setShowExport(true)} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white border border-surface-200 px-2.5 py-1 rounded-lg hover:border-brand-300 hover:text-brand-700 transition-colors">
                   <Share2 className="w-3.5 h-3.5" /> Export
@@ -391,8 +439,8 @@ export default function Home() {
               <div className="card card-body border border-brand-100 bg-brand-50/30">
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div>
-                    <p className="text-sm font-bold text-slate-900">Why these numbers are different from your attribution tool</p>
-                    <p className="text-xs text-slate-500 mt-0.5">MMM tries to estimate what your spend actually caused—not just what happened around the same time.</p>
+                    <p className="text-sm font-bold text-slate-900">Why these numbers look different from your ad platform</p>
+                    <p className="text-xs text-slate-500 mt-0.5">This model estimates what your spend actually caused — not just what happened around the same time.</p>
                   </div>
                   <button type="button" onClick={() => setShowAttributionVsMmmCard(false)} className="text-slate-400 hover:text-slate-600 shrink-0 mt-0.5">
                     <X className="w-4 h-4" />
@@ -403,20 +451,20 @@ export default function Home() {
                     {
                       Icon: ShieldCheck,
                       color: 'text-brand-600',
-                      title: 'Impact over time',
-                      body: 'Attribution gives credit to the last touchpoint before a purchase. MMM looks at your full history to estimate how much revenue each channel drove—even when the impact shows up later.',
+                      title: 'Sees the full impact, not just the last click',
+                      body: 'Standard attribution gives credit to the last touchpoint before a purchase. This model looks at your full history to estimate how much revenue each channel actually drove, even when the impact shows up later.',
                     },
                     {
                       Icon: Lock,
                       color: 'text-green-600',
-                      title: 'No cookies or user tracking',
-                      body: 'MMM uses only aggregated weekly spend and revenue. It does not use cookies or device IDs, so the results don’t depend on third-party tracking.',
+                      title: 'Privacy-safe',
+                      body: 'Only uses aggregated weekly spend and revenue data. No cookies, device IDs, or user tracking required.',
                     },
                     {
                       Icon: BarChart2,
                       color: 'text-purple-600',
-                      title: 'Uncertainty is included',
-                      body: 'Each ROI comes with a confidence range. A smaller range means the model is more confident; a wider range means you may need more data before making big budget changes.',
+                      title: 'Shows how confident the model is',
+                      body: 'Every ROI figure comes with a confidence range. A tight range means act on it. A wide range means the model needs more data.',
                     },
                   ].map(({ Icon, color, title, body }) => (
                     <div key={title} className="flex gap-3">
@@ -448,6 +496,20 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Suggested tab order — dismissible, persisted to localStorage */}
+            {!tabOrderDismissed && (
+              <div className="flex items-center justify-between gap-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500">
+                <span>Suggested order: <strong className="text-slate-600">Channel ROI</strong> &rarr; Budget &rarr; Contribution &rarr; Scenarios &rarr; Synergy &rarr; Geography</span>
+                <button
+                  onClick={() => { localStorage.setItem('mmm_tab_order_dismissed', '1'); setTabOrderDismissed(true) }}
+                  className="shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
+                  aria-label="Dismiss"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Tab content with loading skeleton */}
             <div className="mt-2">
               {isTabLoading ? <TabSkeleton /> : (
@@ -455,15 +517,7 @@ export default function Home() {
                   {isComputingResults && !modelResults && (
                     <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700 mb-4">
                       <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                      Computing results from your data — charts will update automatically when ready.
-                    </div>
-                  )}
-                  {modelResults && backendOnline === false && (
-                    <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 mb-4">
-                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
-                      <span>
-                        <strong>Illustrative results</strong> — backend offline, so these numbers come from a correlation-based approximation, not Bayesian causal inference. ROI, contribution, and confidence ranges are directional estimates only. Connect the backend (Phase 2) to run real Meridian MCMC sampling.
-                      </span>
+                      Building your results — charts will appear shortly.
                     </div>
                   )}
                   {activeTab === 'budget' && <BudgetAllocation modelResults={modelResults} />}
@@ -471,7 +525,7 @@ export default function Home() {
                   {activeTab === 'scenario' && <ScenarioPlanning modelResults={modelResults} />}
                   {activeTab === 'contribution' && <ChannelContribution modelResults={modelResults} />}
                   {activeTab === 'cross' && <CrossChannelImpact modelResults={modelResults} />}
-                  {activeTab === 'geo' && <GeoBreakdown modelResults={modelResults} />}
+                  {activeTab === 'geo' && <GeoBreakdown modelResults={modelResults} selectedGeos={appliedConfig?.geos} />}
                 </>
               )}
             </div>
@@ -479,7 +533,7 @@ export default function Home() {
         )}
       </div>
 
-      {showExport && <ExportModal activeTab={activeTab} onClose={() => setShowExport(false)} isRealMeridian={modelResults?.isRealMeridian === true} />}
+      {showExport && <ExportModal activeTab={activeTab} onClose={() => setShowExport(false)} dataMethod={deriveDataMethod(modelResults)} />}
       {showTour && <GuidedTour onClose={() => { localStorage.setItem('mmm_tour_seen', '1'); setShowTour(false) }} />}
       <GlossaryPanel />
     </div>

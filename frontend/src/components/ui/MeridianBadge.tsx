@@ -1,19 +1,23 @@
-function ShieldIcon({ className }: { className?: string }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 6.35 6.35" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden>
-      <path fill="#87aade" d="m 3.1730477,0.5291708 c -0.027886,2.05e-4 -0.055565,0.0048 -0.082011,0.01367 l -2.38027337,0.794724 c -0.1079454,0.03564 -0.1810515,0.136262 -0.1815965,0.2499379 5.21e-4,1.587368 1.05859377,3.4389909 2.56186987,4.2196541 0.054491,0.01824 0.113437,0.01824 0.1679274,0 C 4.7619789,5.0264936 5.8200519,3.1748707 5.8208332,1.5875027 5.820289,1.4738268 5.7471822,1.3732068 5.6392373,1.3375648 L 3.2589641,0.5428408 c -0.027688,-0.0093 -0.05672,-0.01389 -0.085916,-0.01367 z" />
-      <path fill="#3771c8" d="m 3.1730477,1.5875017 c -0.027886,2.05e-4 -0.055565,0.0048 -0.082011,0.01367 l -1.3219402,0.441297 c -0.1079453,0.03564 -0.1810517,0.136262 -0.181596,0.249938 2.601e-4,0.882465 0.5292965,1.9405351 1.5035362,2.456421 0.054491,0.01824 0.113437,0.01824 0.1679274,0 0.9739786,-0.5158859 1.5030148,-1.573956 1.5035361,-2.456421 -5.443e-4,-0.113676 -0.073651,-0.214296 -0.181596,-0.249938 L 3.2589641,1.6011717 c -0.027688,-0.0093 -0.05672,-0.01389 -0.085916,-0.01367 z" />
-    </svg>
-  )
+/**
+ * MeridianBadge — thin backward-compat wrapper around DataMethodBadge.
+ *
+ * Prefer importing DataMethodBadge directly with an explicit DataMethod.
+ * This wrapper exists so existing call sites that pass isReal?: boolean
+ * continue to work without modification.
+ *
+ * isReal === true  → 'meridian'
+ * isReal === false → 'pearson'
+ * isReal === undefined → 'mock'
+ */
+import DataMethodBadge from './DataMethodBadge'
+import type { DataMethod } from '@/lib/types'
+
+function toMethod(isReal: boolean | undefined): DataMethod {
+  if (isReal === true) return 'meridian'
+  if (isReal === false) return 'pearson'
+  return 'mock'
 }
 
 export default function MeridianBadge({ isReal }: { isReal?: boolean }) {
-  if (isReal) {
-    return (
-      <ShieldIcon />
-    )
-  }
-  return (
-    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Estimated</span>
-  )
+  return <DataMethodBadge method={toMethod(isReal)} />
 }

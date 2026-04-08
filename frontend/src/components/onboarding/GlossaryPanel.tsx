@@ -90,7 +90,7 @@ export default function GlossaryPanel() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-surface-200 shrink-0">
               <div className="flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-brand-500" />
-                <h3 className="font-bold text-slate-900">MMM Glossary</h3>
+                <h3 className="font-bold text-slate-900">Glossary</h3>
                 <span className="text-xs text-slate-400">{TERMS.length} terms</span>
               </div>
               <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-surface-100">
@@ -101,7 +101,7 @@ export default function GlossaryPanel() {
             <div className="px-5 py-3 border-b border-surface-100 shrink-0">
               <input
                 type="text"
-                placeholder="Search terms..."
+                placeholder="Search…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-200"
@@ -116,7 +116,7 @@ export default function GlossaryPanel() {
                 </div>
               ))}
               {filtered.length === 0 && (
-                <p className="text-sm text-slate-400 text-center py-8">No matching terms</p>
+                <p className="text-sm text-slate-400 text-center py-8">No results</p>
               )}
             </div>
           </div>

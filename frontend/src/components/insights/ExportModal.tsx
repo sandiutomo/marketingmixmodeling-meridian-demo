@@ -1,13 +1,16 @@
 'use client'
 import { useState } from 'react'
-import { X, Copy, CheckCheck, Printer } from 'lucide-react'
+import { X, Copy, CheckCheck, Printer, Download, ExternalLink, FileText } from 'lucide-react'
+import { getExportCsvUrl, getExportHtmlUrl } from '@/lib/api'
 
 type InsightTab = 'budget' | 'roi' | 'scenario' | 'contribution' | 'cross' | 'geo'
+type DataMethod = 'meridian' | 'pearson' | 'mock'
 
-function buildSummaries(isRealMeridian: boolean) {
-  const qualityLine = isRealMeridian
-    ? 'Model quality: Strong — Meridian posterior (real MCMC)'
-    : 'Model quality: Estimated — heuristic, not derived from Meridian posterior'
+function buildSummaries(dataMethod: DataMethod) {
+  const qualityLine =
+    dataMethod === 'meridian' ? 'Model quality: Strong — Meridian posterior (real MCMC)' :
+    dataMethod === 'pearson'  ? 'Model quality: Estimated — Pearson correlation on spend series (no posterior)' :
+                                'Model quality: Illustrative — mock data, not from a fitted model'
 
   return {
   budget: `MMM INSIGHTS: BUDGET ALLOCATION
@@ -121,12 +124,12 @@ RECOMMENDED ACTIONS
 interface ExportModalProps {
   activeTab: InsightTab
   onClose: () => void
-  isRealMeridian?: boolean
+  dataMethod?: DataMethod
 }
 
-export default function ExportModal({ activeTab, onClose, isRealMeridian = false }: ExportModalProps) {
+export default function ExportModal({ activeTab, onClose, dataMethod = 'mock' }: ExportModalProps) {
   const [copied, setCopied] = useState(false)
-  const SUMMARIES = buildSummaries(isRealMeridian)
+  const SUMMARIES = buildSummaries(dataMethod)
   const summary = SUMMARIES[activeTab as keyof typeof SUMMARIES] ?? 'Geo breakdown export — run the model to generate a summary.'
 
   const handleCopy = () => {
@@ -146,8 +149,8 @@ export default function ExportModal({ activeTab, onClose, isRealMeridian = false
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 shrink-0">
           <div>
-            <h3 className="font-bold text-slate-900">Export Insights</h3>
-            <p className="text-sm text-slate-500 mt-0.5">Copy the summary below or print to PDF</p>
+            <h3 className="font-bold text-slate-900">Export summary</h3>
+            <p className="text-sm text-slate-500 mt-0.5">Copy the text below or save it as a PDF.</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-100">
             <X className="w-5 h-5 text-slate-500" />
@@ -160,13 +163,47 @@ export default function ExportModal({ activeTab, onClose, isRealMeridian = false
           </pre>
         </div>
 
-        <div className="px-6 py-4 border-t border-surface-200 flex gap-3 shrink-0">
-          <button onClick={handleCopy} className="btn-primary flex-1 justify-center gap-2">
-            {copied ? <><CheckCheck className="w-4 h-4 text-green-300" /> Copied!</> : <><Copy className="w-4 h-4" /> Copy to clipboard</>}
-          </button>
-          <button onClick={handlePrint} className="btn-secondary gap-2">
-            <Printer className="w-4 h-4" /> Print / PDF
-          </button>
+        <div className="px-6 pb-4 border-t border-surface-200 pt-4 space-y-3 shrink-0">
+          <div className="flex gap-3">
+            <button onClick={handleCopy} className="btn-primary flex-1 justify-center gap-2">
+              {copied ? <><CheckCheck className="w-4 h-4 text-green-300" /> Copied ✓</> : <><Copy className="w-4 h-4" /> Copy</>}
+            </button>
+            <button onClick={handlePrint} className="btn-secondary gap-2">
+              <Printer className="w-4 h-4" /> Print / PDF
+            </button>
+            <a
+              href={getExportHtmlUrl()}
+              download="meridian_model_report.html"
+              className="btn-secondary gap-2"
+            >
+              <FileText className="w-4 h-4" /> Download HTML Report
+            </a>
+          </div>
+
+          <div className="border border-surface-200 rounded-xl p-4 bg-surface-50 space-y-2">
+            <p className="text-xs font-semibold text-slate-700">Download for Looker Studio</p>
+            <p className="text-xs text-slate-500">
+              Export a flat CSV with all channel metrics, then connect it to Google Sheets.
+              Any Looker Studio report pre-built with this schema will auto-populate.
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <a
+                href={getExportCsvUrl()}
+                download="meridian_channel_metrics.csv"
+                className="btn-secondary text-xs gap-1.5 py-1.5"
+              >
+                <Download className="w-3.5 h-3.5" /> Download CSV
+              </a>
+              <a
+                href="https://lookerstudio.google.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-brand-600 hover:underline flex items-center gap-1"
+              >
+                Open Looker Studio <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>

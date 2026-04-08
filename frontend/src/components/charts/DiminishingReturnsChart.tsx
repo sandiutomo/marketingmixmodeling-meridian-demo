@@ -2,8 +2,10 @@
 import { useState, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import type { ModelResults } from '@/lib/types'
+import { deriveDataMethod } from '@/lib/types'
 import { fmt, fmtROI, currencySymbol } from '@/lib/format'
-import MeridianBadge from '@/components/ui/MeridianBadge'
+import DataMethodBadge from '@/components/ui/DataMethodBadge'
+import SectionTooltip from '@/components/ui/SectionTooltip'
 
 const FALLBACK_CHANNEL_DATA = [
   { channel: 'TV',          saturation: 850000,  currentSpend: 1200, recommendedSpend: 1000, color: '#4361ee', roi: 2.80, saturationStatus: 'saturated'    as const },
@@ -32,9 +34,9 @@ function generateCurve(saturation: number, currentSpendK: number, roi: number) {
 
 function getStatus(saturationStatus: 'saturated' | 'efficient' | 'room_to_grow' | undefined) {
   if (saturationStatus === 'saturated')
-    return { label: 'Overspending',            color: 'text-red-600 bg-red-50 border-red-100',     desc: 'Adding budget here returns very little. The curve has flattened — consider reallocating to a less saturated channel.' }
+    return { label: 'Past the efficient range',  color: 'text-red-600 bg-red-50 border-red-100',     desc: 'Adding budget here returns very little. The curve has flattened — consider reallocating to a less saturated channel.' }
   if (saturationStatus === 'efficient')
-    return { label: 'Near the efficient limit', color: 'text-amber-600 bg-amber-50 border-amber-100', desc: 'In the efficient zone. Small increases still return well, but gains will taper from here.' }
+    return { label: 'Near the limit',            color: 'text-amber-600 bg-amber-50 border-amber-100', desc: 'In the efficient zone. Small increases still return well, but gains will taper from here.' }
   return { label: 'Room to grow',               color: 'text-green-600 bg-green-50 border-green-100', desc: 'Well below saturation. Increasing budget here should return proportionally.' }
 }
 
@@ -106,8 +108,9 @@ export default function DiminishingReturnsChart({ modelResults }: Props) {
     <div className="space-y-4">
       <div>
         <div className="flex items-center gap-2">
-          <h3 className="font-bold text-slate-900">Spend Saturation by Channel</h3>
-          <MeridianBadge isReal={modelResults?.isRealMeridian} />
+          <h3 className="font-bold text-slate-900">Diminishing returns by channel</h3>
+          <DataMethodBadge method={deriveDataMethod(modelResults)} />
+          <SectionTooltip content="As you spend more on any channel, each additional dollar returns a smaller gain. This chart shows where your current spend sits on that curve. If you're past the bend, shifting budget to a less saturated channel will likely return more revenue." />
         </div>
         <p className="text-sm text-slate-500 mt-0.5">Select a channel to see where your current spend sits on its diminishing returns curve.</p>
       </div>

@@ -39,6 +39,8 @@ export default function SpendResponseChart({ channel, data, currentSpend, optima
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f3f7" />
           <XAxis
             dataKey="spend"
+            domain={[0, 'dataMax']}
+            type="number"
             tick={{ fontSize: 11, fill: '#94a3b8' }}
             tickFormatter={v => fmt(v, currency)}
             axisLine={false}

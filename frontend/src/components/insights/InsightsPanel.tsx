@@ -52,18 +52,17 @@ for ch in [c for c in roi.channel.values if c != 'All Paid Channels']:
 }
 
 const TYPE_CONFIG = {
-  opportunity: { icon: TrendingUp,    bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', badge: 'bg-green-100 text-green-700' },
-  warning:     { icon: AlertTriangle, bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700' },
-  info:        { icon: Lightbulb,     bg: 'bg-blue-50',  border: 'border-blue-200',  text: 'text-blue-700',  badge: 'bg-blue-100 text-blue-700'  },
+  opportunity: { icon: TrendingUp,    accent: 'border-l-green-400',  text: 'text-green-700' },
+  warning:     { icon: AlertTriangle, accent: 'border-l-amber-400',  text: 'text-amber-700' },
+  info:        { icon: Lightbulb,     accent: 'border-l-blue-400',   text: 'text-blue-600'  },
 }
-const LABELS = { opportunity: 'Opportunity', warning: 'Watch out', info: 'Insight' }
 
 type OptimizedItem = { label: string; spendChange: number; spendChangePct: number; optimalSpend: number }
 
 function buildInsights(modelResults: ModelResults | null, optimized?: OptimizedItem[] | null): Insight[] {
   if (!modelResults) {
     return [
-      { id: '1', type: 'opportunity', title: 'Run the analysis to see insights', description: 'Complete model configuration and run the analysis to get channel-specific recommendations based on your data.', channel: undefined },
+      { id: '1', type: 'opportunity', title: 'Run the model to see insights', description: 'Complete model configuration and run the model to get channel-specific recommendations based on your data.', channel: undefined },
     ]
   }
   const currency = modelResults.currency ?? 'USD'
@@ -80,7 +79,7 @@ function buildInsights(modelResults: ModelResults | null, optimized?: OptimizedI
     id: '1',
     type: 'opportunity',
     title: `${top.label} is your strongest ROI driver`,
-    description: `For every ${currency === 'IDR' ? 'Rp 1,000' : '$1'} you spend on ${top.label}, the model attributes ${fmtROI(top.roi, currency)} in revenue — ${fmtPct((top.roi / avg - 1) * 100, 0)} above your portfolio average of ${fmtROI(avg, currency)}.`,
+    description: `${fmtROI(top.roi, currency)} per ${currency === 'IDR' ? 'Rp 1,000' : '$1'} — ${fmtPct((top.roi / avg - 1) * 100, 0)} above portfolio average.`,
     action: topOpt
       ? `The optimizer recommends ${topOpt.spendChange >= 0 ? 'increasing' : 'decreasing'} ${top.label} by ${fmt(Math.abs(topOpt.spendChange), currency)} (${fmtSignedPct(topOpt.spendChangePct, 0)})`
       : `Consider moving 10–15% of ${bottom.label} budget to ${top.label}`,
@@ -93,7 +92,7 @@ function buildInsights(modelResults: ModelResults | null, optimized?: OptimizedI
       id: '2',
       type: 'warning',
       title: `${bottom.label} is underperforming the portfolio`,
-      description: `${bottom.label}'s ${fmtROI(bottom.roi, currency)} ROI is ${fmtPct((1 - bottom.roi / avg) * 100, 0)} below the portfolio average. Adding more budget here produces less impact than other channels.`,
+      description: `${fmtROI(bottom.roi, currency)} per ${currency === 'IDR' ? 'Rp 1,000' : '$1'} — ${fmtPct((1 - bottom.roi / avg) * 100, 0)} below portfolio average.`,
       action: bottomOpt
         ? `The optimizer recommends ${bottomOpt.spendChange <= 0 ? 'reducing' : 'increasing'} ${bottom.label} by ${fmt(Math.abs(bottomOpt.spendChange), currency)} (${fmtSignedPct(bottomOpt.spendChangePct, 0)})`
         : `Review ${bottom.label} targeting and creative. Consider redirecting spend to higher-ROI channels.`,
@@ -108,7 +107,7 @@ function buildInsights(modelResults: ModelResults | null, optimized?: OptimizedI
       id: '3',
       type: 'warning',
       title: `${lowConf.label} needs more data for reliable estimates`,
-      description: `${lowConf.label}'s ROI estimate has a wide range (${fmtROI(lowConf.roi_ci_lower, currency)}–${fmtROI(lowConf.roi_ci_upper, currency)}). That means there isn't enough data yet to pin down the number precisely. Hold off on large budget moves for this channel until more data comes in.`,
+      description: `Wide confidence range (${fmtROI(lowConf.roi_ci_lower, currency)}–${fmtROI(lowConf.roi_ci_upper, currency)}). Hold off on large shifts until more data is available.`,
       channel: lowConf.label,
     })
   }
@@ -119,7 +118,7 @@ function buildInsights(modelResults: ModelResults | null, optimized?: OptimizedI
       id: '4',
       type: 'info',
       title: `${highConf.label} estimates are highly reliable`,
-      description: `${highConf.label}'s ${fmtROI(highConf.roi, currency)} ROI has a narrow range (${fmtROI(highConf.roi_ci_lower, currency)}–${fmtROI(highConf.roi_ci_upper, currency)}), which means the data consistently backs this number. You can act on it with confidence when planning budget changes.`,
+      description: `${fmtROI(highConf.roi, currency)} ROI with tight range (${fmtROI(highConf.roi_ci_lower, currency)}–${fmtROI(highConf.roi_ci_upper, currency)}) — data consistently supports this estimate.`,
       channel: highConf.label,
     })
   }
@@ -136,30 +135,31 @@ interface InsightsPanelProps {
 export default function InsightsPanel({ modelResults, insights, optimized }: InsightsPanelProps) {
   const items = insights ?? buildInsights(modelResults ?? null, optimized)
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center justify-between mb-1">
-        <h3 className="font-bold text-slate-900">Key Insights & Recommendations</h3>
+        <h3 className="font-bold text-slate-900">Key findings</h3>
         <span className="text-xs text-slate-400">{items.length} {items.length === 1 ? 'finding' : 'findings'}</span>
       </div>
       {items.map((insight) => {
-        const { icon: Icon, bg, border, text, badge } = TYPE_CONFIG[insight.type]
+        const { icon: Icon, accent, text } = TYPE_CONFIG[insight.type]
         return (
-          <div key={insight.id} className={`px-4 py-3 ${bg} border ${border} rounded-xl`}>
+          <div key={insight.id} className={`bg-white border border-surface-200 border-l-4 ${accent} rounded-xl px-4 py-4 shadow-sm`}>
             <div className="flex items-start gap-3">
               <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${text}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className={`insight-badge ${badge}`}>{LABELS[insight.type]}</span>
-                  {insight.channel && <span className="insight-badge bg-slate-100 text-slate-600">{insight.channel}</span>}
-                  {insight.impact && <span className="text-xs font-medium text-slate-500">{insight.impact}</span>}
+                  <p className="font-bold text-sm text-slate-900">{insight.title}</p>
+                  {insight.channel && <span className="insight-badge bg-slate-100 text-slate-500">{insight.channel}</span>}
                 </div>
-                <p className={`font-semibold text-sm ${text}`}>{insight.title}</p>
-                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{insight.description}</p>
-                {insight.action && <p className="text-xs text-slate-500 mt-1 italic">{insight.action}</p>}
+                <p className="text-sm text-slate-600 leading-relaxed">{insight.description}</p>
+                {insight.action && <p className="text-xs font-medium text-slate-500 mt-2 leading-relaxed">{insight.action}</p>}
+                {insight.impact && <p className="text-xs text-slate-400 mt-1">{insight.impact}</p>}
                 {INSIGHT_CODE[insight.id] && (
                   <details className="mt-2">
-                    <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">how this is built</summary>
-                    <CodeBlock code={INSIGHT_CODE[insight.id]} />
+                    <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">How this is calculated</summary>
+                    <div className="mt-1.5">
+                      <CodeBlock code={INSIGHT_CODE[insight.id]} />
+                    </div>
                   </details>
                 )}
               </div>
